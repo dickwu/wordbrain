@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: #ffffff;
+  color: #111827;
+}
+
+html.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Word-highlight decoration styles (used by Tiptap extension in Phase 1) */
+.wb-word--known {
+  /* inherit default body colour */
+}
+
+.wb-word--learning {
+  border-bottom: 1px dashed #fa8c16;
+  padding-bottom: 1px;
+}
+
+.wb-word--unknown {
+  background: rgba(79, 70, 229, 0.14);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+html.dark .wb-word--unknown {
+  background: rgba(129, 140, 248, 0.22);
+}

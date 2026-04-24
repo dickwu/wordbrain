@@ -1,0 +1,13 @@
+# Cargo build configuration for cross-platform builds
+
+[target.x86_64-pc-windows-msvc]
+# Use cargo-xwin for cross-compilation from macOS/Linux to Windows
+# Run: bun run tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
+# Or use: ./build-windows.sh
+rustflags = []
+
+# Note: When using --runner cargo-xwin, do NOT set CC/CXX here
+# cargo-xwin handles the compiler and Windows SDK setup automatically
+
+# Note: sccache must be disabled for Windows cross-compilation
+# The build script unsets RUSTC_WRAPPER to handle this
