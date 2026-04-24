@@ -15,7 +15,10 @@ import { MaterialImportModal } from '@/app/components/reader/MaterialImportModal
 import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
 import { LibraryView } from '@/app/components/library/LibraryView';
 import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
+import { ReviewSession } from '@/app/components/srs/ReviewSession';
+import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
+import { refreshDueCount } from '@/app/stores/srsStore';
 import {
   FirstLaunchWizard,
   needsFirstLaunchWizard,
@@ -35,7 +38,7 @@ const { Title, Paragraph, Text } = Typography;
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode = 'reader' | 'library';
+type ViewMode = 'reader' | 'library' | 'review';
 
 export default function Home() {
   const { message } = AntApp.useApp();
@@ -62,6 +65,7 @@ export default function Home() {
           return; // wizard's onFinish triggers the hydrate
         }
         await hydrateFromDb();
+        void refreshDueCount();
       } catch (err) {
         console.warn('[wordbrain] startup hydrate skipped', err);
       }
@@ -204,7 +208,7 @@ export default function Home() {
             WordBrain
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            v0.1.0 · Phase 3
+            v0.1.0 · Phase 4
           </Text>
         </div>
         <Space direction="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
@@ -220,7 +224,14 @@ export default function Home() {
             active={view === 'reader'}
             onClick={() => setView('reader')}
           />
-          <SidebarEntry icon={<ThunderboltOutlined />} label="Review" disabled />
+          <DueQueueBadge>
+            <SidebarEntry
+              icon={<ThunderboltOutlined />}
+              label="Review"
+              active={view === 'review'}
+              onClick={() => setView('review')}
+            />
+          </DueQueueBadge>
           <SidebarEntry icon={<ShareAltOutlined />} label="Network" disabled />
           <SidebarEntry
             icon={<SettingOutlined />}
@@ -254,6 +265,8 @@ export default function Home() {
             setImportOpen={setImportOpen}
             onLemmaDrill={setWordDrawerLemma}
           />
+        ) : view === 'review' ? (
+          <ReviewSession />
         ) : (
           <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
         )}

@@ -139,3 +139,68 @@ export async function recommendNext(
     limit,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 — FSRS review queue. Mirrors `src-tauri/src/commands/srs.rs`.
+// ---------------------------------------------------------------------------
+
+export interface AddToSrsOutcome {
+  word_id: number;
+  already_scheduled: boolean;
+  due: number;
+}
+
+export interface DueCardIpc {
+  word_id: number;
+  lemma: string;
+  stability: number;
+  difficulty: number;
+  elapsed_days: number;
+  scheduled_days: number;
+  reps: number;
+  lapses: number;
+  last_review: number | null;
+  due: number;
+}
+
+export interface SchedulingUpdateIpc {
+  stability: number;
+  difficulty: number;
+  elapsed_days: number;
+  scheduled_days: number;
+  due: number;
+}
+
+export interface ApplyRatingOutcome {
+  reps: number;
+  lapses: number;
+  due: number;
+  graduated_to_known: boolean;
+}
+
+export async function addToSrs(lemma: string): Promise<AddToSrsOutcome> {
+  return invoke<AddToSrsOutcome>('add_to_srs', { lemma });
+}
+
+export async function listDueSrs(nowOverride?: number): Promise<DueCardIpc[]> {
+  return invoke<DueCardIpc[]>('list_due_srs', { nowOverride: nowOverride ?? null });
+}
+
+export async function countDueSrs(nowOverride?: number): Promise<number> {
+  return invoke<number>('count_due_srs', { nowOverride: nowOverride ?? null });
+}
+
+export async function applySrsRating(
+  lemma: string,
+  rating: number,
+  update: SchedulingUpdateIpc,
+  opts?: { nowOverride?: number; graduationReps?: number }
+): Promise<ApplyRatingOutcome> {
+  return invoke<ApplyRatingOutcome>('apply_srs_rating', {
+    lemma,
+    rating,
+    update,
+    nowOverride: opts?.nowOverride ?? null,
+    graduationReps: opts?.graduationReps ?? null,
+  });
+}

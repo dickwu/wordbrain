@@ -20,6 +20,7 @@ pub mod dict;
 pub mod materials;
 pub mod schema;
 pub mod settings;
+pub mod srs;
 pub mod words;
 
 pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

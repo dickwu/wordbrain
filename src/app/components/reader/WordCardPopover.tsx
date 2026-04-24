@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Popover, Button, Typography, Tag, Space, Tabs, Spin, Select, Alert } from 'antd';
-import { CheckOutlined, CloseOutlined, LinkOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  CloseOutlined,
+  LinkOutlined,
+  PlusOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
+import { App as AntApp } from 'antd';
 import type { WordHighlightClickPayload } from './WordHighlightExtension';
 import {
   lookupOffline,
@@ -14,6 +21,8 @@ import {
   type OnlineProvider,
   type AiProvider,
 } from '@/app/lib/dict';
+import { addToSrs, isTauri } from '@/app/lib/ipc';
+import { refreshDueCount } from '@/app/stores/srsStore';
 
 const { Text, Paragraph } = Typography;
 
@@ -34,6 +43,30 @@ export function WordCardPopover({
   contextSentence,
   onDrillLemma,
 }: WordCardPopoverProps) {
+  const { message } = AntApp.useApp();
+  const [addingToSrs, setAddingToSrs] = useState(false);
+
+  const handleAddToSrs = async () => {
+    setAddingToSrs(true);
+    try {
+      if (!isTauri()) {
+        message.info(`[dev] would schedule "${payload.lemma}" for SRS`);
+      } else {
+        const out = await addToSrs(payload.lemma);
+        if (out.already_scheduled) {
+          message.info(`"${payload.lemma}" is already in your review queue.`);
+        } else {
+          message.success(`Added "${payload.lemma}" to the review queue.`);
+        }
+        await refreshDueCount();
+      }
+    } catch (err) {
+      message.error(`Failed to add to SRS: ${err}`);
+    } finally {
+      setAddingToSrs(false);
+    }
+  };
+
   const style: React.CSSProperties = {
     position: 'fixed',
     left: payload.rect.x,
@@ -80,9 +113,17 @@ export function WordCardPopover({
         ]}
       />
 
-      <Space style={{ marginTop: 8 }}>
+      <Space style={{ marginTop: 8 }} wrap>
         <Button type="primary" size="small" icon={<CheckOutlined />} onClick={onMarkKnown}>
           Mark known
+        </Button>
+        <Button
+          size="small"
+          icon={<PlusOutlined />}
+          loading={addingToSrs}
+          onClick={handleAddToSrs}
+        >
+          Add to SRS
         </Button>
         {onDrillLemma && (
           <Button size="small" icon={<LinkOutlined />} onClick={onDrillLemma}>
