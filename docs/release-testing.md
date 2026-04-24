@@ -81,5 +81,5 @@ SHA="$(shasum -a 256 dist-release/WordBrain_0.1.0_universal.dmg | awk '{print $1
 gsed -i "s/sha256 :no_check/sha256 \"$SHA\"/" homebrew/wordbrain.rb
 ```
 
-Push the formula to `lifefarmer/homebrew-tap` so that
-`brew install --cask lifefarmer/tap/wordbrain` resolves the new version.
+Push the formula to `dickwu/homebrew-tap` so that
+`brew install --cask dickwu/tap/wordbrain` resolves the new version.

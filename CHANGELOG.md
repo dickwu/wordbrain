@@ -20,8 +20,8 @@ Phase 9 — auto-update UI, Homebrew distribution, end-user README.
   `get_setting`/`set_setting`, wrapper `settingsStore.ts`).
 - **Homebrew cask automation** (`.github/workflows/homebrew.yml`) — on every published release,
   downloads the universal macOS DMG, computes SHA-256, and writes `Casks/wordbrain.rb` into the
-  tap repo at `lifefarmer/homebrew-wordbrain` via `gh api PUT`. Users install with
-  `brew install lifefarmer/wordbrain/wordbrain`.
+  tap repo at `dickwu/homebrew-tap` via `gh api PUT`. Users install with
+  `brew install dickwu/tap/wordbrain`.
 - Vitest coverage for `settingsStore` hydrate/persist round-trip against a mocked Tauri invoke.
 
 ### Changed

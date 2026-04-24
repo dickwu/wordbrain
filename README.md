@@ -16,7 +16,7 @@ the machine unless you export it yourself.
 ### Homebrew (macOS)
 
 ```bash
-brew install lifefarmer/wordbrain/wordbrain
+brew install dickwu/tap/wordbrain
 ```
 
 This installs the latest universal `.dmg` into `/Applications/WordBrain.app`. Updates land
@@ -25,7 +25,7 @@ automatically every time you run `brew upgrade wordbrain`.
 ### Direct download
 
 Pick your platform from the
-[Releases page](https://github.com/lifefarmer/wordbrain/releases/latest):
+[Releases page](https://github.com/dickwu/wordbrain/releases/latest):
 
 - **macOS**: `.dmg` (universal — Apple Silicon + Intel)
 - **Windows**: `.msi` installer (x86_64)
@@ -40,7 +40,7 @@ Requirements: [Bun](https://bun.sh), [Rust](https://rustup.rs) (stable toolchain
 Windows 10+ / Ubuntu 22.04+.
 
 ```bash
-git clone https://github.com/lifefarmer/wordbrain
+git clone https://github.com/dickwu/wordbrain
 cd wordbrain
 bun install
 bun run tauri dev
@@ -146,7 +146,7 @@ The `--ci` path is the normal one — it bumps `package.json`, `src-tauri/tauri.
 ([`release.yml`](.github/workflows/release.yml)) then builds signed artifacts for all three
 platforms, generates `latest.json` for the updater, and creates a GitHub release. A second workflow
 ([`homebrew.yml`](.github/workflows/homebrew.yml)) downloads the macOS DMG, computes its SHA-256,
-and writes an updated cask to the [`lifefarmer/homebrew-wordbrain`](https://github.com/lifefarmer/homebrew-wordbrain)
+and writes an updated cask to the [`dickwu/homebrew-tap`](https://github.com/dickwu/homebrew-tap)
 tap repo so `brew upgrade wordbrain` lands the new version.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for version history.

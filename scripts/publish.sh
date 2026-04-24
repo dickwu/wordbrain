@@ -42,16 +42,14 @@
 #
 # On every published GitHub release, the homebrew workflow downloads the macOS
 # universal DMG, computes its sha256, and writes `Casks/wordbrain.rb` into the
-# tap repo at lifefarmer/homebrew-wordbrain. Users install with:
+# shared tap repo at dickwu/homebrew-tap (same tap r2 uses). Users install with:
 #
-#   brew install lifefarmer/wordbrain/wordbrain
+#   brew install dickwu/tap/wordbrain
 #
-# Prerequisites (one-time):
-#   1. Create the tap repo:  gh repo create lifefarmer/homebrew-wordbrain --public \
-#                              --description "Homebrew tap for WordBrain"
-#   2. Fine-grained PAT scoped to the tap repo only, permissions =
-#      Contents: Read and write. Save as `HOMEBREW_TAP_TOKEN` repo secret on
-#      lifefarmer/wordbrain.
+# Prerequisites (one-time): the tap repo dickwu/homebrew-tap already exists
+# from the r2 project. Create a fine-grained PAT scoped to that tap repo,
+# Contents: Read and write, and save as the `HOMEBREW_TAP_TOKEN` secret on
+# dickwu/wordbrain.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -182,7 +180,7 @@ platforms = {}
 def add(platform_key, installer_glob, sig_glob):
     for sig in dist.glob(sig_glob):
         base = sig.name[:-4]  # strip .sig
-        url = f"https://github.com/lifefarmer/wordbrain/releases/download/v{version}/{base}"
+        url = f"https://github.com/dickwu/wordbrain/releases/download/v{version}/{base}"
         sig_content = sig.read_text().strip()
         platforms[platform_key] = {"signature": sig_content, "url": url}
 
