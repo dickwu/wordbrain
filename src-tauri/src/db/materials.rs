@@ -35,6 +35,13 @@ pub struct SaveMaterialInput {
     pub total_tokens: i64,
     pub unique_tokens: i64,
     pub tokens: Vec<TokenEdge>,
+    /// Phase-5: when this material is a child (EPUB chapter), points at the
+    /// book-level material. `None` for standalone paste/file imports.
+    #[serde(default)]
+    pub parent_material_id: Option<i64>,
+    /// Phase-5: 0-based index within the parent's spine. `None` for non-EPUB.
+    #[serde(default)]
+    pub chapter_index: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,6 +63,26 @@ pub struct MaterialSummary {
     pub unknown_count_at_import: i64,
     pub created_at: i64,
     pub read_at: Option<i64>,
+    pub parent_material_id: Option<i64>,
+    pub chapter_index: Option<i64>,
+}
+
+/// Full payload returned by `load_material`, including raw body + tiptap JSON
+/// so the reader can re-render a previously saved document.
+#[derive(Debug, Clone, Serialize)]
+pub struct MaterialFull {
+    pub id: i64,
+    pub title: String,
+    pub source_kind: String,
+    pub origin_path: Option<String>,
+    pub raw_text: String,
+    pub tiptap_json: String,
+    pub total_tokens: i64,
+    pub unique_tokens: i64,
+    pub created_at: i64,
+    pub read_at: Option<i64>,
+    pub parent_material_id: Option<i64>,
+    pub chapter_index: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,7 +139,7 @@ pub async fn save_material_on_conn(
                (title, source_kind, origin_path, tiptap_json, raw_text, \
                 total_tokens, unique_tokens, unknown_count_at_import, \
                 parent_material_id, chapter_index, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, NULL, NULL, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10)",
             turso::params![
                 input.title.as_str(),
                 input.source_kind.as_str(),
@@ -121,6 +148,8 @@ pub async fn save_material_on_conn(
                 input.raw_text.as_str(),
                 input.total_tokens,
                 input.unique_tokens,
+                input.parent_material_id,
+                input.chapter_index,
                 now,
             ],
         )
@@ -219,17 +248,23 @@ pub async fn save_material(input: &SaveMaterialInput) -> DbResult<SaveMaterialOu
 // ---------------------------------------------------------------------------
 
 /// Every material, newest first, with live unknown counts.
+///
+/// The library view only shows root materials (books + standalone docs). EPUB
+/// chapters (`parent_material_id IS NOT NULL`) are fetched separately via
+/// [`list_child_materials`] when the user opens the chapter picker.
 pub async fn list_materials_on_conn(conn: &Connection) -> DbResult<Vec<MaterialSummary>> {
     let mut rows = conn
         .query(
             "SELECT m.id, m.title, m.source_kind, m.total_tokens, m.unique_tokens, \
                     m.unknown_count_at_import, m.created_at, m.read_at, \
+                    m.parent_material_id, m.chapter_index, \
                     COALESCE((SELECT COUNT(DISTINCT wm.word_id) \
                                FROM word_materials wm \
                                JOIN words w ON w.id = wm.word_id \
                               WHERE wm.material_id = m.id AND w.state <> 'known'), 0) \
                       AS unknown_count \
                FROM materials m \
+              WHERE m.parent_material_id IS NULL \
               ORDER BY m.created_at DESC",
             (),
         )
@@ -246,7 +281,9 @@ pub async fn list_materials_on_conn(conn: &Connection) -> DbResult<Vec<MaterialS
             unknown_count_at_import: row.get::<i64>(5)?,
             created_at: row.get::<i64>(6)?,
             read_at: nullable_i64(&row, 7)?,
-            unknown_count: row.get::<i64>(8)?,
+            parent_material_id: nullable_i64(&row, 8)?,
+            chapter_index: nullable_i64(&row, 9)?,
+            unknown_count: row.get::<i64>(10)?,
         });
     }
     Ok(out)
@@ -255,6 +292,89 @@ pub async fn list_materials_on_conn(conn: &Connection) -> DbResult<Vec<MaterialS
 pub async fn list_materials() -> DbResult<Vec<MaterialSummary>> {
     let conn = get_connection()?.lock().await;
     list_materials_on_conn(&conn).await
+}
+
+/// Chapters of a given book-level material, ordered by `chapter_index`.
+pub async fn list_child_materials_on_conn(
+    conn: &Connection,
+    parent_id: i64,
+) -> DbResult<Vec<MaterialSummary>> {
+    let mut rows = conn
+        .query(
+            "SELECT m.id, m.title, m.source_kind, m.total_tokens, m.unique_tokens, \
+                    m.unknown_count_at_import, m.created_at, m.read_at, \
+                    m.parent_material_id, m.chapter_index, \
+                    COALESCE((SELECT COUNT(DISTINCT wm.word_id) \
+                               FROM word_materials wm \
+                               JOIN words w ON w.id = wm.word_id \
+                              WHERE wm.material_id = m.id AND w.state <> 'known'), 0) \
+                      AS unknown_count \
+               FROM materials m \
+              WHERE m.parent_material_id = ?1 \
+              ORDER BY COALESCE(m.chapter_index, 0) ASC",
+            turso::params![parent_id],
+        )
+        .await?;
+
+    let mut out = Vec::new();
+    while let Some(row) = rows.next().await? {
+        out.push(MaterialSummary {
+            id: row.get::<i64>(0)?,
+            title: row.get::<String>(1)?,
+            source_kind: row.get::<String>(2)?,
+            total_tokens: row.get::<i64>(3)?,
+            unique_tokens: row.get::<i64>(4)?,
+            unknown_count_at_import: row.get::<i64>(5)?,
+            created_at: row.get::<i64>(6)?,
+            read_at: nullable_i64(&row, 7)?,
+            parent_material_id: nullable_i64(&row, 8)?,
+            chapter_index: nullable_i64(&row, 9)?,
+            unknown_count: row.get::<i64>(10)?,
+        });
+    }
+    Ok(out)
+}
+
+pub async fn list_child_materials(parent_id: i64) -> DbResult<Vec<MaterialSummary>> {
+    let conn = get_connection()?.lock().await;
+    list_child_materials_on_conn(&conn, parent_id).await
+}
+
+/// Full payload for a single material — body + tiptap JSON. Powers
+/// "open in reader" from the library and the EPUB chapter picker.
+pub async fn load_material_on_conn(conn: &Connection, id: i64) -> DbResult<Option<MaterialFull>> {
+    let mut rows = conn
+        .query(
+            "SELECT id, title, source_kind, origin_path, raw_text, tiptap_json, \
+                    total_tokens, unique_tokens, created_at, read_at, \
+                    parent_material_id, chapter_index \
+               FROM materials WHERE id = ?1",
+            turso::params![id],
+        )
+        .await?;
+    if let Some(row) = rows.next().await? {
+        Ok(Some(MaterialFull {
+            id: row.get::<i64>(0)?,
+            title: row.get::<String>(1)?,
+            source_kind: row.get::<String>(2)?,
+            origin_path: nullable_string(&row, 3)?,
+            raw_text: row.get::<String>(4)?,
+            tiptap_json: row.get::<String>(5)?,
+            total_tokens: row.get::<i64>(6)?,
+            unique_tokens: row.get::<i64>(7)?,
+            created_at: row.get::<i64>(8)?,
+            read_at: nullable_i64(&row, 9)?,
+            parent_material_id: nullable_i64(&row, 10)?,
+            chapter_index: nullable_i64(&row, 11)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn load_material(id: i64) -> DbResult<Option<MaterialFull>> {
+    let conn = get_connection()?.lock().await;
+    load_material_on_conn(&conn, id).await
 }
 
 /// Every material containing `lemma`, newest first. Powers the Word → Docs drawer.

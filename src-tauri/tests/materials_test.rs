@@ -37,6 +37,8 @@ fn mk_input(title: &str, raw: &str, tokens: Vec<materials::TokenEdge>) -> materi
         total_tokens: unique, // synthetic — one occurrence per token
         unique_tokens: unique,
         tokens,
+        parent_material_id: None,
+        chapter_index: None,
     }
 }
 
@@ -240,6 +242,8 @@ async fn recommend_next_with_50_docs_picks_target_ratio_doc() {
             total_tokens: 1000, // inside the length-penalty sweet spot
             unique_tokens: doc_size as i64,
             tokens,
+            parent_material_id: None,
+            chapter_index: None,
         };
         let saved = materials::save_material_on_conn(&conn, &input)
             .await

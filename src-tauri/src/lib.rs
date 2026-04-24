@@ -3,6 +3,7 @@ mod commands;
 // and the `*_on_conn` query helpers directly against a real file-backed DB.
 pub mod db;
 pub mod keys;
+pub mod parsers;
 
 use crate::keys::KeyVault;
 use tauri::Manager;
@@ -50,10 +51,13 @@ pub fn run() {
             commands::keys::list_configured_providers,
             commands::materials::save_material,
             commands::materials::list_materials,
+            commands::materials::list_child_materials,
+            commands::materials::load_material,
             commands::materials::materials_for_word,
             commands::materials::record_material_close,
             commands::materials::undo_auto_exposure,
             commands::materials::recommend_next,
+            commands::materials::parse_epub,
             commands::srs::add_to_srs,
             commands::srs::list_due_srs,
             commands::srs::count_due_srs,

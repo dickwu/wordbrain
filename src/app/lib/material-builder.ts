@@ -35,7 +35,7 @@ function previewAround(raw: string, offset: number): string {
 export interface BuildMaterialInputArgs {
   title: string;
   raw: string;
-  sourceKind?: 'paste' | 'file' | 'url';
+  sourceKind?: SaveMaterialInput['source_kind'];
   originPath?: string | null;
   tiptapJson?: unknown;
 }

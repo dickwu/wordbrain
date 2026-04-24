@@ -1,10 +1,14 @@
-//! Tauri IPC surface for Phase-3 material library + recommender.
+//! Tauri IPC surface for Phase-3 material library + recommender, plus the
+//! Phase-5 EPUB ingestion command.
+
+use std::path::PathBuf;
 
 use crate::db;
 use crate::db::materials::{
-    MaterialCloseOutcome, MaterialForWord, MaterialSummary, RecommendedMaterial, SaveMaterialInput,
-    SaveMaterialOutput,
+    MaterialCloseOutcome, MaterialForWord, MaterialFull, MaterialSummary, RecommendedMaterial,
+    SaveMaterialInput, SaveMaterialOutput,
 };
+use crate::parsers::epub::Chapter;
 
 /// Default `auto_exposure_threshold` — five closes before `unknown → learning`.
 /// Overridable via `settings` key `auto_exposure_threshold`.
@@ -22,6 +26,34 @@ pub async fn list_materials() -> Result<Vec<MaterialSummary>, String> {
     db::materials::list_materials()
         .await
         .map_err(|e| format!("list_materials: {e}"))
+}
+
+#[tauri::command]
+pub async fn list_child_materials(parent_id: i64) -> Result<Vec<MaterialSummary>, String> {
+    db::materials::list_child_materials(parent_id)
+        .await
+        .map_err(|e| format!("list_child_materials: {e}"))
+}
+
+#[tauri::command]
+pub async fn load_material(material_id: i64) -> Result<Option<MaterialFull>, String> {
+    db::materials::load_material(material_id)
+        .await
+        .map_err(|e| format!("load_material: {e}"))
+}
+
+/// Phase-5 — parse an EPUB on disk into a `Vec<Chapter>` for the chapter
+/// picker UI. Pure read; no DB side effects. Each chapter is returned to the
+/// frontend which tokenises + calls `save_material` per chapter with
+/// `parent_material_id` set to a parent book row the frontend created first.
+#[tauri::command]
+pub async fn parse_epub(path: String) -> Result<Vec<Chapter>, String> {
+    // Parsing is CPU-bound; hop to blocking so we never stall the tokio
+    // runtime on a ~1 MB zip decompression.
+    let p = PathBuf::from(path);
+    tokio::task::spawn_blocking(move || crate::parsers::epub::parse_epub(&p))
+        .await
+        .map_err(|e| format!("parse_epub join: {e}"))?
 }
 
 #[tauri::command]

@@ -49,13 +49,17 @@ export interface TokenEdgeInput {
 
 export interface SaveMaterialInput {
   title: string;
-  source_kind: 'paste' | 'file' | 'url';
+  source_kind: 'paste' | 'file' | 'url' | 'epub' | 'epub_chapter';
   origin_path: string | null;
   tiptap_json: string;
   raw_text: string;
   total_tokens: number;
   unique_tokens: number;
   tokens: TokenEdgeInput[];
+  /** Phase 5 — set when this material is an EPUB chapter. */
+  parent_material_id?: number | null;
+  /** Phase 5 — 0-based index within the parent EPUB spine. */
+  chapter_index?: number | null;
 }
 
 export interface SaveMaterialOutput {
@@ -75,6 +79,31 @@ export interface MaterialSummary {
   unknown_count_at_import: number;
   created_at: number;
   read_at: number | null;
+  parent_material_id: number | null;
+  chapter_index: number | null;
+}
+
+export interface MaterialFull {
+  id: number;
+  title: string;
+  source_kind: string;
+  origin_path: string | null;
+  raw_text: string;
+  tiptap_json: string;
+  total_tokens: number;
+  unique_tokens: number;
+  created_at: number;
+  read_at: number | null;
+  parent_material_id: number | null;
+  chapter_index: number | null;
+}
+
+export interface EpubChapter {
+  index: number;
+  title: string;
+  raw_text: string;
+  tiptap_json: string;
+  word_count: number;
 }
 
 export interface MaterialForWord {
@@ -110,6 +139,18 @@ export async function saveMaterial(input: SaveMaterialInput): Promise<SaveMateri
 
 export async function listMaterials(): Promise<MaterialSummary[]> {
   return invoke<MaterialSummary[]>('list_materials');
+}
+
+export async function listChildMaterials(parentId: number): Promise<MaterialSummary[]> {
+  return invoke<MaterialSummary[]>('list_child_materials', { parentId });
+}
+
+export async function loadMaterial(materialId: number): Promise<MaterialFull | null> {
+  return invoke<MaterialFull | null>('load_material', { materialId });
+}
+
+export async function parseEpub(path: string): Promise<EpubChapter[]> {
+  return invoke<EpubChapter[]>('parse_epub', { path });
 }
 
 export async function materialsForWord(lemma: string): Promise<MaterialForWord[]> {
