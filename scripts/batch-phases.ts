@@ -8,7 +8,7 @@
 // For each phase N:
 //   1. Reads .omc/prd.json to find US-PHASE-N's title + acceptance criteria
 //   2. Creates a git worktree at .omc/worktrees/phase-{N} off `main`
-//   3. Dispatches `claude -p` (sonnet, acceptEdits, budget-capped) with the
+//   3. Dispatches `claude -p` (opus, xhigh effort, acceptEdits, budget-capped) with the
 //      plan excerpt + AC as context, working inside the worktree
 //   4. Streams each sub-Claude's stdout to .omc/logs/phase-{N}.log
 //   5. Reports per-phase result + remaining-budget summary at the end
@@ -47,19 +47,21 @@ interface CliArgs {
   dryRun: boolean;
   budgetUsd: number;
   model: 'sonnet' | 'haiku' | 'opus';
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { phases: [], dryRun: false, budgetUsd: 3.0, model: 'sonnet' };
+  const args: CliArgs = { phases: [], dryRun: false, budgetUsd: 3.0, model: 'opus', effort: 'xhigh' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
     else if (a === '--budget') args.budgetUsd = Number(argv[++i]);
     else if (a === '--model') args.model = argv[++i] as CliArgs['model'];
+    else if (a === '--effort') args.effort = argv[++i] as CliArgs['effort'];
     else if (!a.startsWith('--')) args.phases.push(a);
   }
   if (args.phases.length === 0) {
-    console.error('usage: bun run scripts/batch-phases.ts <phase>... [--dry-run] [--budget N] [--model sonnet|haiku|opus]');
+    console.error('usage: bun run scripts/batch-phases.ts <phase>... [--dry-run] [--budget N] [--model opus|sonnet|haiku] [--effort low|medium|high|xhigh|max]');
     console.error('example: bun run scripts/batch-phases.ts 1.5 2 --dry-run');
     process.exit(2);
   }
@@ -144,7 +146,7 @@ async function main(): Promise<void> {
   const prd = await loadPRD();
   await fs.mkdir(LOGS_DIR, { recursive: true });
 
-  console.log(`[batch] phases=[${args.phases.join(', ')}] model=${args.model} budget=$${args.budgetUsd} dryRun=${args.dryRun}`);
+  console.log(`[batch] phases=[${args.phases.join(', ')}] model=${args.model} effort=${args.effort} budget=$${args.budgetUsd} dryRun=${args.dryRun}`);
 
   const jobs: Array<ClaudeRunOptions & { phase: string; worktree: string; story: PRDStory }> = [];
   for (const phase of args.phases) {
@@ -161,6 +163,7 @@ async function main(): Promise<void> {
       story,
       prompt,
       model: args.model,
+      effort: args.effort,
       cwd: worktree,
       outputFormat: 'json',
       permissionMode: 'acceptEdits',
