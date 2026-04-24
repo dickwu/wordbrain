@@ -122,7 +122,7 @@ build_macos() {
   # Drop the dev-connector capability + feature; local release builds should
   # match the CI release.yml path (no xcap / libspa / aws-sdk-s3).
   rm -f src-tauri/capabilities/dev-connector.json
-  bun run tauri build --no-default-features --target universal-apple-darwin
+  bun run tauri build --target universal-apple-darwin
   git checkout -- src-tauri/capabilities/dev-connector.json 2>/dev/null || true
 }
 
@@ -133,7 +133,7 @@ build_windows_xwin() {
     return 1
   fi
   rm -f src-tauri/capabilities/dev-connector.json
-  bun run tauri build --no-default-features --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles msi,updater
+  bun run tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles msi,updater
   git checkout -- src-tauri/capabilities/dev-connector.json 2>/dev/null || true
 }
 
@@ -147,7 +147,7 @@ build_linux_docker() {
     -e TAURI_SIGNING_PRIVATE_KEY \
     -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
     ghcr.io/tauri-apps/tauri-build:latest \
-    bash -lc 'rm -f src-tauri/capabilities/dev-connector.json && bun install && bun run tauri build --no-default-features --bundles deb,appimage,updater'
+    bash -lc 'rm -f src-tauri/capabilities/dev-connector.json && bun install && bun run tauri build --bundles deb,appimage,updater'
 }
 
 collect_artifacts() {

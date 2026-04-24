@@ -44,10 +44,9 @@ wordbrain-resource-manager = { path = "crates/resource-manager" }
 
 # tauri-plugin-connector ships dev-only instrumentation (screen capture + R2
 # upload of snapshots) that pulls xcap → libspa/pipewire (Linux) and
-# aws-sdk-s3 transitively. Cargo can't gate deps on `debug_assertions`, so we
-# expose it as an optional feature enabled by default — local `bun run tauri
-# dev` gets the plugin; CI release builds opt out via `--no-default-features`
-# (see .github/workflows/release.yml).
+# aws-sdk-s3 transitively. Kept behind the opt-in `dev-connector` feature so
+# `tauri build` (release) never compiles it. `bun run tauri:dev` enables the
+# feature (see package.json).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-connector = { version = "0.9", optional = true }
 
@@ -56,5 +55,5 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 
 [features]
-default = ["dev-connector"]
+default = []
 dev-connector = ["dep:tauri-plugin-connector"]

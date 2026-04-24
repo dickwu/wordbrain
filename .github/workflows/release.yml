@@ -78,8 +78,8 @@ jobs:
 
       # Force bash so `$TAURI_ARGS` expands correctly on Windows (default
       # PowerShell reads `$VAR` as PowerShell syntax, not env-var expansion).
-      # `--no-default-features` drops the dev-only tauri-plugin-connector
-      # feature so release builds don't pull in xcap / libspa / aws-sdk-s3.
+      # dev-connector is not in Cargo.toml's default feature set, so a plain
+      # `tauri build` excludes xcap / libspa / aws-sdk-s3.
       - name: Build & bundle
         shell: bash
         env:
@@ -93,7 +93,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_ARGS: ${{ matrix.args }}
           TAURI_BUNDLES: ${{ matrix.bundles }}
-        run: bun run tauri build $TAURI_ARGS --no-default-features --bundles $TAURI_BUNDLES
+        run: bun run tauri build $TAURI_ARGS --bundles $TAURI_BUNDLES
 
       - name: Collect bundles
         shell: bash
