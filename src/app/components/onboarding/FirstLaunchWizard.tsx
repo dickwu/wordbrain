@@ -95,7 +95,7 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
       title="Welcome to WordBrain"
       destroyOnHidden
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Paragraph style={{ marginBottom: 0 }}>
           Pick the point on the frequency list up to which you already know every word. We'll
           treat everything above that rank as <Text strong>known</Text> and only highlight the

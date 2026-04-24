@@ -376,7 +376,7 @@ export default function Home() {
             v0.1.0
           </Text>
         </div>
-        <Space direction="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
+        <Space orientation="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
           <SidebarEntry
             icon={<BookOutlined />}
             label="Library"
