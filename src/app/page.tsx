@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Button, Divider, Drawer, Layout, Space, Tag, Typography } from 'antd';
+import { App as AntApp, Button, Divider, Drawer, Layout, Space, Typography } from 'antd';
 import {
   BookOutlined,
   PlusOutlined,
@@ -373,7 +373,7 @@ export default function Home() {
             WordBrain
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            v0.1.0 · Phase 4
+            v0.1.0
           </Text>
         </div>
         <Space direction="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
@@ -554,10 +554,6 @@ function ReaderView({
           </Button>
         </Space>
       </div>
-
-      <Tag color="processing" style={{ marginBottom: 16 }}>
-        Phase 3 · Material library + bipartite edges + recommender
-      </Tag>
 
       <ReaderPane initialContent={readerSeed} onDrillLemma={onLemmaDrill} />
 
