@@ -3,6 +3,9 @@
 //! Single globally-shared `turso::Connection` guarded by a tokio Mutex. The
 //! connection is opened once on app start at
 //! `<app_data_dir>/wordbrain.db`; schema creation is idempotent.
+//!
+//! The offline ECDICT bundle lives in its own SQLite file (see [`dict`]) so
+//! we do not pay a 770k-row import on first launch.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -12,6 +15,8 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 use turso::{Builder, Connection};
 
+pub mod cache;
+pub mod dict;
 pub mod schema;
 pub mod settings;
 pub mod words;
@@ -60,6 +65,11 @@ pub async fn init(app: &AppHandle) -> Result<()> {
     DB_CONNECTION
         .set(Mutex::new(conn))
         .map_err(|_| anyhow::anyhow!("wordbrain db already initialised"))?;
+
+    // Then bootstrap the bundled offline dictionary (separate sqlite file).
+    dict::bootstrap(app)
+        .await
+        .map_err(|e| anyhow::anyhow!("bootstrap ecdict: {e}"))?;
 
     Ok(())
 }

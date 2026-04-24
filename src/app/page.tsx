@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Layout, Typography, Space, Tag, Button, App as AntApp, Divider } from 'antd';
+import { Layout, Typography, Space, Tag, Button, App as AntApp, Divider, Drawer } from 'antd';
 import {
   BookOutlined,
   ReadOutlined,
@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { ReaderPane } from '@/app/components/reader/ReaderPane';
 import { MaterialImportModal } from '@/app/components/reader/MaterialImportModal';
+import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
 import {
   FirstLaunchWizard,
@@ -27,6 +28,7 @@ const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own
 export default function Home() {
   const { message } = AntApp.useApp();
   const [importOpen, setImportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
   const knownCount = useWordStore((s) => s.known.size);
   const hydrated = useWordStore((s) => s.hydrated);
@@ -72,7 +74,9 @@ export default function Home() {
           <SidebarEntry icon={<ReadOutlined />} label="Reader" active />
           <SidebarEntry icon={<ThunderboltOutlined />} label="Review" disabled />
           <SidebarEntry icon={<ShareAltOutlined />} label="Network" disabled />
-          <SidebarEntry icon={<SettingOutlined />} label="Settings" disabled />
+          <div onClick={() => setSettingsOpen(true)}>
+            <SidebarEntry icon={<SettingOutlined />} label="Settings" />
+          </div>
         </Space>
         <Divider style={{ margin: '24px 12px' }} />
         <div style={{ padding: '0 20px' }}>
@@ -112,6 +116,16 @@ export default function Home() {
           <Text code>.omc/plans/wordbrain-v1.md</Text>.
         </Paragraph>
       </Content>
+
+      <Drawer
+        title="Settings"
+        placement="right"
+        width={520}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      >
+        <ApiKeysPanel />
+      </Drawer>
 
       <MaterialImportModal
         open={importOpen}

@@ -37,6 +37,9 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
+    "resources": [
+      "assets/ecdict.db"
+    ],
     "createUpdaterArtifacts": false
   },
   "plugins": {}

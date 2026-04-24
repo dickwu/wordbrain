@@ -2,6 +2,10 @@ mod commands;
 // `pub` so integration tests under `src-tauri/tests/` can exercise the schema
 // and the `*_on_conn` query helpers directly against a real file-backed DB.
 pub mod db;
+pub mod keys;
+
+use crate::keys::KeyVault;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,8 +18,15 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            // Initialise the BYOK stronghold vault synchronously so state is
+            // available to the first command that needs a key.
+            let vault = KeyVault::init(&handle)
+                .map_err(|e| format!("stronghold vault: {e}"))?;
+            handle.manage(vault);
+
+            let handle_db = handle.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = db::init(&handle).await {
+                if let Err(e) = db::init(&handle_db).await {
                     log::error!("db init failed: {e:?}");
                 }
             });
@@ -31,6 +42,12 @@ pub fn run() {
             commands::words::frequency_preview,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::dict::lookup_offline,
+            commands::dict::lookup_online,
+            commands::dict::lookup_ai,
+            commands::keys::save_api_key,
+            commands::keys::has_api_key,
+            commands::keys::list_configured_providers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running WordBrain");
