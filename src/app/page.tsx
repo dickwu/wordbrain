@@ -20,6 +20,7 @@ import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
 import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
 import { LibraryView } from '@/app/components/library/LibraryView';
 import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
+import { NetworkView } from '@/app/components/network/NetworkView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
 import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
@@ -46,7 +47,7 @@ const { Title, Paragraph, Text } = Typography;
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode = 'reader' | 'library' | 'review';
+type ViewMode = 'reader' | 'library' | 'review' | 'network';
 
 export default function Home() {
   const { message } = AntApp.useApp();
@@ -260,9 +261,7 @@ export default function Home() {
         for (const ch of chapters) {
           const tiptapJson = safeParseTiptap(ch.tiptap_json) ?? {
             type: 'doc',
-            content: [
-              { type: 'paragraph', content: [{ type: 'text', text: ch.raw_text }] },
-            ],
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: ch.raw_text }] }],
           };
           const chInput = buildMaterialInput({
             title: ch.title,
@@ -398,7 +397,12 @@ export default function Home() {
               onClick={() => setView('review')}
             />
           </DueQueueBadge>
-          <SidebarEntry icon={<ShareAltOutlined />} label="Network" disabled />
+          <SidebarEntry
+            icon={<ShareAltOutlined />}
+            label="Network"
+            active={view === 'network'}
+            onClick={() => setView('network')}
+          />
           <SidebarEntry
             icon={<SettingOutlined />}
             label="Settings"
@@ -424,7 +428,15 @@ export default function Home() {
     <Layout style={{ minHeight: '100vh' }}>
       {sidebar}
 
-      <Content style={{ padding: 40, maxWidth: 960, width: '100%' }}>
+      <Content
+        style={{
+          padding: 40,
+          maxWidth: view === 'network' ? undefined : 960,
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {view === 'reader' ? (
           <ReaderView
             readerSeed={readerSeed}
@@ -433,6 +445,24 @@ export default function Home() {
           />
         ) : view === 'review' ? (
           <ReviewSession />
+        ) : view === 'network' ? (
+          <NetworkView
+            refreshKey={libraryRefresh}
+            onOpenMaterial={async (id) => {
+              try {
+                const full = await loadMaterial(id);
+                if (!full) {
+                  message.error('Material not found');
+                  return;
+                }
+                setReaderSeed(full.raw_text);
+                setActiveMaterialId(id);
+                setView('reader');
+              } catch (err) {
+                message.error(`open material failed: ${err}`);
+              }
+            }}
+          />
         ) : (
           <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
         )}

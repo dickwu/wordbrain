@@ -245,3 +245,69 @@ export async function applySrsRating(
     graduationReps: opts?.graduationReps ?? null,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Word network graph. Mirrors `src-tauri/src/db/network.rs`.
+// ---------------------------------------------------------------------------
+
+export type WordState = 'known' | 'learning' | 'unknown' | string;
+
+export interface NetworkNode {
+  id: number;
+  lemma: string;
+  state: WordState;
+  exposure_count: number;
+  /** Co-occurrence degree inside the returned subgraph. */
+  degree: number;
+  /** Every material id this lemma appears in. */
+  material_ids: number[];
+}
+
+export interface NetworkEdge {
+  source: number;
+  target: number;
+  /** Number of distinct materials where both endpoints co-occur. */
+  weight: number;
+}
+
+export interface NetworkPayload {
+  nodes: NetworkNode[];
+  edges: NetworkEdge[];
+  /** Total words in the library regardless of the limit. */
+  total_words: number;
+}
+
+export interface SharedMaterial {
+  material_id: number;
+  title: string;
+  sentence_preview: string | null;
+}
+
+export interface ClusterNeighbour {
+  lemma: string;
+  state: WordState;
+  exposure_count: number;
+  hop: 1 | 2 | number;
+  shared_materials: SharedMaterial[];
+}
+
+export interface ClusterPayload {
+  anchor: string;
+  anchor_state: WordState;
+  anchor_exposure_count: number;
+  neighbours: ClusterNeighbour[];
+}
+
+export async function buildNetwork(limit = 500): Promise<NetworkPayload> {
+  return invoke<NetworkPayload>('build_network', { limit });
+}
+
+export async function clusterForWord(
+  lemma: string,
+  maxPerHop = 20
+): Promise<ClusterPayload | null> {
+  return invoke<ClusterPayload | null>('cluster_for_word', {
+    lemma,
+    maxPerHop,
+  });
+}

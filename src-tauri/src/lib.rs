@@ -62,6 +62,8 @@ pub fn run() {
             commands::srs::list_due_srs,
             commands::srs::count_due_srs,
             commands::srs::apply_srs_rating,
+            commands::network::build_network,
+            commands::network::cluster_for_word,
         ])
         .run(tauri::generate_context!())
         .expect("error while running WordBrain");

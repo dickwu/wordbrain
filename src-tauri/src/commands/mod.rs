@@ -4,6 +4,7 @@
 pub mod dict;
 pub mod keys;
 pub mod materials;
+pub mod network;
 pub mod settings;
 pub mod srs;
 pub mod words;
