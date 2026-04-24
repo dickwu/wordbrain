@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout, Typography, Space, Tag, Button, App as AntApp, Divider } from 'antd';
 import {
   BookOutlined,
@@ -12,7 +12,12 @@ import {
 } from '@ant-design/icons';
 import { ReaderPane } from '@/app/components/reader/ReaderPane';
 import { MaterialImportModal } from '@/app/components/reader/MaterialImportModal';
-import { useWordStore } from '@/app/stores/wordStore';
+import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
+import {
+  FirstLaunchWizard,
+  needsFirstLaunchWizard,
+} from '@/app/components/onboarding/FirstLaunchWizard';
+import { isTauri } from '@/app/lib/ipc';
 
 const { Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
@@ -24,6 +29,28 @@ export default function Home() {
   const [importOpen, setImportOpen] = useState(false);
   const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
   const knownCount = useWordStore((s) => s.known.size);
+  const hydrated = useWordStore((s) => s.hydrated);
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Hydrate known-set from the DB on first mount; show the first-launch wizard
+  // if the user has never picked a cutoff.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (isTauri() && (await needsFirstLaunchWizard())) {
+          if (!cancelled) setWizardOpen(true);
+          return; // wizard's onFinish triggers the hydrate
+        }
+        await hydrateFromDb();
+      } catch (err) {
+        console.warn('[wordbrain] startup hydrate skipped', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -52,9 +79,9 @@ export default function Home() {
           <Text type="secondary" style={{ fontSize: 12 }}>
             Known words
           </Text>
-          <div style={{ fontSize: 24, fontWeight: 600 }}>{knownCount}</div>
+          <div style={{ fontSize: 24, fontWeight: 600 }}>{knownCount.toLocaleString()}</div>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            seeded from 500-word Phase-1 list
+            {hydrated ? 'hydrated from Turso SQLite' : 'using Phase-1 fallback seed'}
           </Text>
         </div>
       </Sider>

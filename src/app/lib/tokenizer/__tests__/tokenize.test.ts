@@ -75,6 +75,18 @@ describe('lemmatize', () => {
   test('lowercases its input', () => {
     expect(lemmatize('RUNNING')).toBe('run');
   });
+
+  test('strips possessive clitic so "bank\'s" → "bank"', () => {
+    expect(lemmatize("bank's")).toBe('bank');
+    expect(lemmatize('bank’s')).toBe('bank');
+    expect(lemmatize("Alice's")).toBe('alice');
+  });
+
+  test('leaves non-possessive contractions alone', () => {
+    // n't is a different clitic from 's; "don't" and "can't" remain intact.
+    expect(lemmatize("don't")).toBe("don't");
+    expect(lemmatize("can't")).toBe("can't");
+  });
 });
 
 describe('tokenize', () => {
