@@ -10,7 +10,6 @@
     "fs:default",
     "http:default",
     "process:default",
-    "updater:default",
-    "connector:default"
+    "updater:default"
   ]
 }

@@ -18,7 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "dev-connector")]
     {
         builder = builder.plugin(tauri_plugin_connector::init());
     }

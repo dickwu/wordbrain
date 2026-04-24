@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dev-connector",
+  "description": "Permissions for the tauri-plugin-connector dev tooling. This capability file is removed by .github/workflows/release.yml before release builds (which use --no-default-features and therefore do not register the connector plugin).",
+  "windows": ["main"],
+  "permissions": [
+    "connector:default"
+  ]
+}

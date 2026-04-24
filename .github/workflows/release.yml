@@ -41,10 +41,13 @@ jobs:
         with:
           bun-version: latest
 
+      # rustup doesn't know `universal-apple-darwin` — it's a Tauri CLI
+      # virtual target that combines arm64 + x64 via lipo. Install both real
+      # targets on macOS; use matrix.target as-is on Linux / Windows.
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -59,12 +62,26 @@ jobs:
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libgtk-3-dev \
-            libsoup-3.0-dev build-essential
+            libsoup-3.0-dev build-essential \
+            libpipewire-0.3-dev
 
       - name: Install JS deps
         run: bun install --frozen-lockfile
 
+      # Drop the dev-connector capability file — the connector plugin is
+      # behind the `dev-connector` cargo feature, which `--no-default-features`
+      # disables. If the capability file stayed, tauri-build would fail with
+      # "Permission connector:default not found".
+      - name: Remove dev-only capabilities
+        shell: bash
+        run: rm -f src-tauri/capabilities/dev-connector.json
+
+      # Force bash so `$TAURI_ARGS` expands correctly on Windows (default
+      # PowerShell reads `$VAR` as PowerShell syntax, not env-var expansion).
+      # `--no-default-features` drops the dev-only tauri-plugin-connector
+      # feature so release builds don't pull in xcap / libspa / aws-sdk-s3.
       - name: Build & bundle
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -76,7 +93,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_ARGS: ${{ matrix.args }}
           TAURI_BUNDLES: ${{ matrix.bundles }}
-        run: bun run tauri build $TAURI_ARGS --bundles $TAURI_BUNDLES
+        run: bun run tauri build $TAURI_ARGS --no-default-features --bundles $TAURI_BUNDLES
 
       - name: Collect bundles
         shell: bash
