@@ -11,7 +11,12 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { ReaderPane } from '@/app/components/reader/ReaderPane';
-import { MaterialImportModal } from '@/app/components/reader/MaterialImportModal';
+import {
+  MaterialImportModal,
+  type ImportedEpub,
+  type ImportedFile,
+} from '@/app/components/reader/MaterialImportModal';
+import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
 import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
 import { LibraryView } from '@/app/components/library/LibraryView';
 import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
@@ -25,9 +30,12 @@ import {
 } from '@/app/components/onboarding/FirstLaunchWizard';
 import {
   isTauri,
+  listChildMaterials,
+  loadMaterial,
   recordMaterialClose,
   saveMaterial,
   undoAutoExposure,
+  type EpubChapter,
   type MaterialForWord,
   type MaterialSummary,
 } from '@/app/lib/ipc';
@@ -53,6 +61,16 @@ export default function Home() {
   const hydrated = useWordStore((s) => s.hydrated);
   const [wizardOpen, setWizardOpen] = useState(false);
   const prevMaterialRef = useRef<number | null>(null);
+
+  // EPUB chapter-picker state. `activeBookId` is the `materials.id` of the
+  // parent book row; `pickerChapters` is either the freshly-parsed in-memory
+  // list (new drops) or the saved-summary list fetched from SQLite (re-opening
+  // from the library). The picker prefers the in-memory list if present.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerBookTitle, setPickerBookTitle] = useState('');
+  const [pickerChapters, setPickerChapters] = useState<EpubChapter[] | null>(null);
+  const [pickerSaved, setPickerSaved] = useState<MaterialSummary[] | null>(null);
+  const [activeBookId, setActiveBookId] = useState<number | null>(null);
 
   // Hydrate known-set from the DB on first mount; show the first-launch wizard
   // if the user has never picked a cutoff.
@@ -168,25 +186,173 @@ export default function Home() {
     [message]
   );
 
+  const onFilePicked = useCallback(
+    async (payload: ImportedFile) => {
+      setImportOpen(false);
+      setReaderSeed(payload.text);
+      if (!isTauri()) {
+        message.success(`Loaded ${payload.suggestedTitle} into reader`);
+        return;
+      }
+      try {
+        const input = buildMaterialInput({
+          title: payload.suggestedTitle || deriveTitle(payload.text),
+          raw: payload.text,
+          sourceKind: 'file',
+          originPath: payload.originPath,
+        });
+        const out = await saveMaterial(input);
+        setActiveMaterialId(out.material_id);
+        setLibraryRefresh((n) => n + 1);
+        message.success(
+          `Imported "${payload.suggestedTitle}" · ${out.unique_tokens.toLocaleString()} unique words (${out.unknown_count_at_import} unknown).`
+        );
+      } catch (err) {
+        message.error(`save_material failed: ${err}`);
+      }
+    },
+    [message]
+  );
+
+  const onEpubPicked = useCallback(
+    async (payload: ImportedEpub) => {
+      setImportOpen(false);
+      if (!isTauri()) {
+        message.info('EPUB import requires the Tauri shell.');
+        return;
+      }
+      const { chapters, suggestedTitle, originPath } = payload;
+      if (chapters.length === 0) {
+        message.error('EPUB contained no chapters.');
+        return;
+      }
+      try {
+        // 1. Persist the book-level parent material. Its `raw_text` is a
+        //    concatenation of chapter bodies so search / library summaries
+        //    still see the full corpus; `tiptap_json` is a minimal stub
+        //    pointing readers at the chapter picker instead of the body.
+        const aggregateRaw = chapters.map((c) => c.raw_text).join('\n\n');
+        const bookInput = buildMaterialInput({
+          title: suggestedTitle,
+          raw: aggregateRaw,
+          sourceKind: 'epub',
+          originPath,
+          tiptapJson: {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: `${suggestedTitle} — ${chapters.length} chapters. Open a chapter from the picker.`,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const bookOut = await saveMaterial(bookInput);
+
+        // 2. Persist every chapter as a child. Each chapter gets its own
+        //    `word_materials` edges so the bipartite graph still reflects
+        //    where a lemma actually appeared.
+        for (const ch of chapters) {
+          const tiptapJson = safeParseTiptap(ch.tiptap_json) ?? {
+            type: 'doc',
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: ch.raw_text }] },
+            ],
+          };
+          const chInput = buildMaterialInput({
+            title: ch.title,
+            raw: ch.raw_text,
+            sourceKind: 'epub_chapter',
+            originPath,
+            tiptapJson,
+          });
+          chInput.parent_material_id = bookOut.material_id;
+          chInput.chapter_index = ch.index;
+          await saveMaterial(chInput);
+        }
+
+        // 3. Pull the freshly-saved chapter summaries so badges use the same
+        //    unknown count the DB sees; keep the in-memory chapters too so
+        //    the picker has body text for instant "open chapter" hand-off.
+        const saved = await listChildMaterials(bookOut.material_id).catch(() => []);
+
+        setActiveBookId(bookOut.material_id);
+        setPickerBookTitle(suggestedTitle);
+        setPickerChapters(chapters);
+        setPickerSaved(saved);
+        setPickerOpen(true);
+        setLibraryRefresh((n) => n + 1);
+        message.success(
+          `Imported "${suggestedTitle}" · ${chapters.length} chapter${chapters.length === 1 ? '' : 's'}.`
+        );
+      } catch (err) {
+        message.error(`EPUB import failed: ${err}`);
+      }
+    },
+    [message]
+  );
+
+  /** Open a chapter from the picker — set the reader content, track its id
+   * as the active material so auto-exposure fires on switch. Prefers the
+   * in-memory chapter body if available (fresh drop), otherwise falls back
+   * to `load_material`. */
+  const onOpenPickerChapter = useCallback(
+    async (index: number) => {
+      try {
+        if (pickerChapters && pickerChapters[index]) {
+          setReaderSeed(pickerChapters[index].raw_text);
+          const savedRow = pickerSaved?.[index];
+          if (savedRow) setActiveMaterialId(savedRow.id);
+          setView('reader');
+          setPickerOpen(false);
+          return;
+        }
+        if (pickerSaved && pickerSaved[index]) {
+          const row = pickerSaved[index];
+          const full = await loadMaterial(row.id);
+          if (!full) {
+            message.error('Chapter not found.');
+            return;
+          }
+          setReaderSeed(full.raw_text);
+          setActiveMaterialId(full.id);
+          setView('reader');
+          setPickerOpen(false);
+        }
+      } catch (err) {
+        message.error(`Open chapter failed: ${err}`);
+      }
+    },
+    [message, pickerChapters, pickerSaved]
+  );
+
   const onOpenFromLibrary = useCallback(
     async (mat: MaterialSummary) => {
-      setView('reader');
-      // LibraryView returns summaries; we need the raw text from the DB to
-      // re-render Tiptap. For now we reuse whatever is stored in `raw_text` by
-      // re-fetching a single material via list_materials. A dedicated
-      // load_material IPC would be a nice future addition; right now we keep
-      // state light and refetch on demand.
       try {
-        const mats = await import('@/app/lib/ipc').then((m) => m.listMaterials());
-        const row = mats.find((m) => m.id === mat.id);
-        if (!row) {
+        // Book-level EPUB row → open the chapter picker instead of the reader.
+        if (mat.source_kind === 'epub') {
+          const saved = await listChildMaterials(mat.id);
+          setActiveBookId(mat.id);
+          setPickerBookTitle(mat.title);
+          setPickerChapters(null); // no in-memory bodies; picker will load on open
+          setPickerSaved(saved);
+          setPickerOpen(true);
+          return;
+        }
+        // Standalone or chapter row → load full body into the reader.
+        const full = await loadMaterial(mat.id);
+        if (!full) {
           message.error('Material not found');
           return;
         }
-        // `list_materials` does not carry raw_text to keep the list cheap — we
-        // simply use title+preview for now. Users paste fresh text to edit.
-        // Track the active material so auto-exposure fires on the next switch.
+        setReaderSeed(full.raw_text);
         setActiveMaterialId(mat.id);
+        setView('reader');
       } catch (err) {
         message.error(`open material failed: ${err}`);
       }
@@ -292,6 +458,17 @@ export default function Home() {
         open={importOpen}
         onCancel={() => setImportOpen(false)}
         onSubmit={onImportSubmit}
+        onFilePicked={onFilePicked}
+        onEpubPicked={onEpubPicked}
+      />
+
+      <EpubChapterPicker
+        open={pickerOpen}
+        bookTitle={pickerBookTitle}
+        chapters={pickerChapters}
+        savedChapters={pickerSaved}
+        onClose={() => setPickerOpen(false)}
+        onOpenChapter={onOpenPickerChapter}
       />
 
       <FirstLaunchWizard
@@ -360,6 +537,16 @@ function ReaderView({
       </Paragraph>
     </>
   );
+}
+
+/** Safe JSON parse for Tiptap JSON returned from Rust; falls back to `null`
+ * so the caller can construct a minimal paragraph doc. */
+function safeParseTiptap(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function SidebarEntry({
