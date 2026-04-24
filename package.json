@@ -11,6 +11,8 @@
     "start": "next start",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -25,6 +27,10 @@
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "@tiptap/extension-placeholder": "3.22.4",
+    "@tiptap/pm": "3.22.4",
+    "@tiptap/react": "3.22.4",
+    "@tiptap/starter-kit": "3.22.4",
     "antd": "^6.3.6",
     "framer-motion": "^12.38.0",
     "next": "^16.2.4",
@@ -33,17 +39,22 @@
     "react-dom": "^19.2.5",
     "react-virtuoso": "^4.18.5",
     "tailwindcss": "^4.2.2",
+    "wink-lemmatizer": "^3.0.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@laststance/tailwind-suggest-canonical-classes": "^0.1.1",
     "@tanstack/react-query-devtools": "^5.99.0",
     "@tauri-apps/cli": "^2.10.1",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "jsdom": "^28.0.0",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.8"
   }
 }

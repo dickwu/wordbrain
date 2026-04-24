@@ -1,31 +1,29 @@
 'use client';
 
-import { Layout, Typography, Space, Tag, App as AntApp } from 'antd';
+import { useState } from 'react';
+import { Layout, Typography, Space, Tag, Button, App as AntApp, Divider } from 'antd';
 import {
   BookOutlined,
   ReadOutlined,
   ShareAltOutlined,
   SettingOutlined,
   ThunderboltOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
+import { ReaderPane } from '@/app/components/reader/ReaderPane';
+import { MaterialImportModal } from '@/app/components/reader/MaterialImportModal';
+import { useWordStore } from '@/app/stores/wordStore';
 
 const { Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
+const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
+
 export default function Home() {
   const { message } = AntApp.useApp();
-
-  const phaseStatus = [
-    { label: 'Phase 0: Fork & rename', done: true },
-    { label: 'Phase 1: Tiptap highlight loop', done: false },
-    { label: 'Phase 1.5: Frequency seeding', done: false },
-    { label: 'Phase 2: Dictionary stack', done: false },
-    { label: 'Phase 3: Library + bipartite edges', done: false },
-    { label: 'Phase 4: FSRS review queue', done: false },
-    { label: 'Phase 5: EPUB + .srt', done: false },
-    { label: 'Phase 6: Network graph', done: false },
-    { label: 'Phase 7: Packaging + release', done: false },
-  ];
+  const [importOpen, setImportOpen] = useState(false);
+  const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
+  const knownCount = useWordStore((s) => s.known.size);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -39,59 +37,64 @@ export default function Home() {
             WordBrain
           </Title>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            v0.1.0 · Phase 0
+            v0.1.0 · Phase 1
           </Text>
         </div>
         <Space direction="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
           <SidebarEntry icon={<BookOutlined />} label="Library" disabled />
-          <SidebarEntry icon={<ReadOutlined />} label="Reader" disabled />
+          <SidebarEntry icon={<ReadOutlined />} label="Reader" active />
           <SidebarEntry icon={<ThunderboltOutlined />} label="Review" disabled />
           <SidebarEntry icon={<ShareAltOutlined />} label="Network" disabled />
           <SidebarEntry icon={<SettingOutlined />} label="Settings" disabled />
         </Space>
+        <Divider style={{ margin: '24px 12px' }} />
+        <div style={{ padding: '0 20px' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Known words
+          </Text>
+          <div style={{ fontSize: 24, fontWeight: 600 }}>{knownCount}</div>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            seeded from 500-word Phase-1 list
+          </Text>
+        </div>
       </Sider>
 
-      <Content style={{ padding: 48, maxWidth: 820 }}>
-        <Title>Welcome to WordBrain</Title>
-        <Paragraph>
-          A local-first English vocabulary builder. Paste or drop in reading material, and the
-          editor will highlight every unfamiliar word based on your personal known-word list.
-          Click a word to see its Chinese meaning, mark it as learned, or add it to the FSRS
-          review queue. Every exposure is recorded so your word network densifies over time.
+      <Content style={{ padding: 40, maxWidth: 960, width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <Title level={3} style={{ margin: 0 }}>
+              Reader
+            </Title>
+            <Text type="secondary">
+              Unknown words are highlighted. Click one to mark it known.
+            </Text>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setImportOpen(true)}>
+            Paste reading material
+          </Button>
+        </div>
+
+        <Tag color="processing" style={{ marginBottom: 16 }}>
+          Phase 1 · Tiptap + tokenizer + ProseMirror decorations active
+        </Tag>
+
+        <ReaderPane initialContent={readerSeed} />
+
+        <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 16 }}>
+          Dictionary lookups, persistence, and the FSRS review queue ship in later phases — see
+          <Text code>.omc/plans/wordbrain-v1.md</Text>.
         </Paragraph>
-
-        <Title level={4}>Build status</Title>
-        <Space direction="vertical" size={4}>
-          {phaseStatus.map((p) => (
-            <div key={p.label}>
-              <Tag color={p.done ? 'success' : 'default'}>{p.done ? 'DONE' : 'TODO'}</Tag>
-              <Text>{p.label}</Text>
-            </div>
-          ))}
-        </Space>
-
-        <Paragraph style={{ marginTop: 32 }}>
-          <Text type="secondary">
-            This is the Phase 0 baseline — a clean Tauri + Next.js skeleton renamed from the r2
-            template. The Tiptap reading loop arrives in Phase 1.
-          </Text>
-        </Paragraph>
-
-        <button
-          onClick={() => message.info('Phase 1 not implemented yet')}
-          style={{
-            marginTop: 16,
-            padding: '8px 16px',
-            border: '1px solid #4f46e5',
-            borderRadius: 6,
-            background: '#4f46e5',
-            color: '#fff',
-            cursor: 'pointer',
-          }}
-        >
-          Paste reading material
-        </button>
       </Content>
+
+      <MaterialImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSubmit={(raw) => {
+          setReaderSeed(raw);
+          setImportOpen(false);
+          message.success(`Loaded ${raw.length.toLocaleString()} chars into reader`);
+        }}
+      />
     </Layout>
   );
 }
@@ -100,10 +103,12 @@ function SidebarEntry({
   icon,
   label,
   disabled,
+  active,
 }: {
   icon: React.ReactNode;
   label: string;
   disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <div
@@ -113,7 +118,8 @@ function SidebarEntry({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        color: disabled ? 'rgba(0,0,0,0.35)' : 'inherit',
+        color: disabled ? 'rgba(0,0,0,0.35)' : active ? '#4f46e5' : 'inherit',
+        background: active ? 'rgba(79,70,229,0.08)' : 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >

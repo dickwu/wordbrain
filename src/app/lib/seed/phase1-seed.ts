@@ -1,0 +1,80 @@
+// Hard-coded ~500-word seed list for Phase 1.  Replaced in Phase 1.5 by the
+// SUBTLEX-US frequency list bundled in src-tauri/assets/subtlex_us_freq.json
+// and a cutoff slider.  Words chosen from the long-tail overlap of
+// Dolch-220 + Fry-1000 + Oxford-3000-beginner, in lemma form.
+export const PHASE1_SEED: readonly string[] = [
+  // function words
+  'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'so', 'because',
+  'of', 'to', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'about',
+  'into', 'over', 'under', 'after', 'before', 'above', 'below', 'between', 'through', 'during',
+  'as', 'than', 'that', 'this', 'these', 'those', 'there', 'here', 'where', 'when',
+  'who', 'whom', 'whose', 'which', 'what', 'why', 'how', 'whether', 'while', 'until',
+  // pronouns
+  'i', 'me', 'my', 'mine', 'myself', 'you', 'your', 'yours', 'yourself', 'yourselves',
+  'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its',
+  'itself', 'we', 'us', 'our', 'ours', 'ourselves', 'they', 'them', 'their', 'theirs',
+  'themselves', 'one', 'someone', 'anyone', 'everyone', 'something', 'anything', 'everything', 'nothing', 'noone',
+  // be / have / do
+  'be', 'am', 'is', 'are', 'was', 'were', 'been', 'being', 'have', 'has',
+  'had', 'having', 'do', 'does', 'did', 'done', 'doing',
+  // common auxiliaries + modals
+  'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'ought',
+  'need', 'dare', 'used',
+  // numbers + time
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'ten', 'first', 'second', 'third', 'last', 'next', 'now', 'today', 'tomorrow', 'yesterday',
+  'morning', 'afternoon', 'evening', 'night', 'day', 'week', 'month', 'year', 'hour', 'minute',
+  'time', 'moment', 'always', 'never', 'often', 'sometimes', 'seldom', 'usually', 'once', 'twice',
+  // high-frequency verbs
+  'go', 'come', 'make', 'take', 'give', 'get', 'put', 'say', 'tell', 'ask',
+  'see', 'look', 'watch', 'hear', 'listen', 'feel', 'think', 'know', 'understand', 'remember',
+  'forget', 'believe', 'mean', 'want', 'need', 'like', 'love', 'hate', 'try', 'find',
+  'lose', 'keep', 'leave', 'stay', 'stop', 'start', 'begin', 'end', 'finish', 'continue',
+  'work', 'play', 'study', 'learn', 'teach', 'read', 'write', 'speak', 'talk', 'sing',
+  'eat', 'drink', 'sleep', 'wake', 'run', 'walk', 'sit', 'stand', 'open', 'close',
+  'live', 'die', 'become', 'seem', 'appear', 'happen', 'bring', 'carry', 'send', 'receive',
+  'buy', 'sell', 'pay', 'cost', 'use', 'help', 'change', 'turn', 'move', 'stop',
+  'wait', 'meet', 'follow', 'lead', 'show', 'hide', 'let', 'allow', 'choose', 'decide',
+  'call', 'answer', 'write', 'draw', 'paint', 'build', 'break', 'fix', 'clean', 'wash',
+  // high-frequency nouns
+  'person', 'people', 'man', 'woman', 'child', 'boy', 'girl', 'friend', 'family', 'parent',
+  'mother', 'father', 'brother', 'sister', 'son', 'daughter', 'baby', 'husband', 'wife', 'name',
+  'house', 'home', 'room', 'door', 'window', 'wall', 'floor', 'roof', 'kitchen', 'bed',
+  'city', 'country', 'world', 'place', 'street', 'road', 'way', 'school', 'office', 'shop',
+  'store', 'hospital', 'bank', 'park', 'garden', 'tree', 'flower', 'grass', 'water', 'fire',
+  'earth', 'sky', 'sun', 'moon', 'star', 'cloud', 'rain', 'snow', 'wind', 'sea',
+  'river', 'mountain', 'book', 'page', 'word', 'letter', 'number', 'line', 'story', 'poem',
+  'song', 'music', 'game', 'sport', 'ball', 'toy', 'car', 'bus', 'train', 'plane',
+  'food', 'bread', 'rice', 'meat', 'fish', 'fruit', 'apple', 'orange', 'milk', 'tea',
+  'coffee', 'sugar', 'salt', 'oil', 'egg', 'cheese', 'chicken', 'soup', 'table', 'chair',
+  'cup', 'plate', 'bowl', 'glass', 'knife', 'fork', 'spoon', 'bottle', 'box', 'bag',
+  'money', 'coin', 'price', 'job', 'work', 'business', 'company', 'market', 'problem', 'question',
+  'answer', 'idea', 'reason', 'way', 'kind', 'type', 'thing', 'way', 'end', 'part',
+  'group', 'team', 'club', 'party', 'meeting', 'event', 'experience', 'moment', 'side', 'piece',
+  // body / clothes / animals
+  'head', 'hair', 'face', 'eye', 'nose', 'mouth', 'ear', 'tooth', 'tongue', 'neck',
+  'shoulder', 'arm', 'hand', 'finger', 'leg', 'knee', 'foot', 'toe', 'back', 'heart',
+  'shirt', 'pants', 'dress', 'skirt', 'shoe', 'hat', 'coat', 'sock', 'glove', 'bag',
+  'dog', 'cat', 'bird', 'horse', 'cow', 'pig', 'sheep', 'fish', 'chicken', 'mouse',
+  // colors + adjectives
+  'red', 'blue', 'green', 'yellow', 'white', 'black', 'brown', 'grey', 'pink', 'orange',
+  'big', 'small', 'little', 'tall', 'short', 'long', 'wide', 'narrow', 'fat', 'thin',
+  'good', 'bad', 'nice', 'kind', 'mean', 'happy', 'sad', 'angry', 'afraid', 'tired',
+  'hungry', 'thirsty', 'full', 'empty', 'old', 'young', 'new', 'hot', 'cold', 'warm',
+  'cool', 'wet', 'dry', 'clean', 'dirty', 'easy', 'hard', 'soft', 'heavy', 'light',
+  'dark', 'bright', 'loud', 'quiet', 'fast', 'slow', 'early', 'late', 'high', 'low',
+  'deep', 'shallow', 'near', 'far', 'same', 'different', 'other', 'another', 'each', 'every',
+  'all', 'any', 'many', 'much', 'few', 'little', 'several', 'some', 'no', 'both',
+  'some', 'any', 'no', 'half', 'whole', 'simple', 'difficult', 'important', 'interesting', 'boring',
+  'free', 'busy', 'ready', 'tired', 'awake', 'asleep', 'right', 'wrong', 'true', 'false',
+  // common adverbs + prepositions + conjunctions
+  'not', 'yes', 'maybe', 'please', 'sorry', 'thanks', 'hello', 'goodbye', 'very', 'really',
+  'just', 'only', 'also', 'too', 'either', 'neither', 'both', 'again', 'still', 'yet',
+  'already', 'soon', 'later', 'ago', 'ever', 'once', 'twice', 'almost', 'quite', 'enough',
+  'more', 'most', 'less', 'least', 'better', 'best', 'worse', 'worst', 'well', 'badly',
+  'here', 'there', 'away', 'back', 'home', 'inside', 'outside', 'up', 'down', 'around',
+];
+
+// De-duplicated, lowercased, exported as a frozen array so downstream code
+// can safely `new Set(PHASE1_SEED)` without worrying about mutations.
+export const PHASE1_SEED_SET: ReadonlySet<string> = new Set(PHASE1_SEED.map((w) => w.toLowerCase()));
