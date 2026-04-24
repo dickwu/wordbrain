@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5MUZFODYyMzhCQzEyMDYKUldRR0VydzRZdWdmV2NseGlPMGtCaDlGSXlhWFU1dktFOWhnaThqV0JmNHlGSUtJNjF0MG1tYnAK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlDQjczQzkxNUIwNzU3NUQKUldSZFZ3ZGJrVHkzbktiNUk2RzRnRE5SWnZFK1hJbmp5bDd1NFB5UmRPRG0rT3pJOXllRGtseTUK",
       "endpoints": [
         "https://github.com/dickwu/wordbrain/releases/latest/download/latest.json"
       ]
