@@ -72,7 +72,7 @@ export function ClusterDrillDown({
       open={Boolean(lemma)}
       onClose={onClose}
       placement="right"
-      width={560}
+      size={560}
       title={
         lemma ? (
           <span>

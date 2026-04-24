@@ -36,6 +36,22 @@
 # In GitHub Actions, store the base64 of the private key file as the
 # TAURI_SIGNING_PRIVATE_KEY secret; the release workflow wires it through.
 # NEVER commit wordbrain.key — it is already covered by the top-level .gitignore.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Homebrew distribution (.github/workflows/homebrew.yml):
+#
+# On every published GitHub release, the homebrew workflow downloads the macOS
+# universal DMG, computes its sha256, and writes `Casks/wordbrain.rb` into the
+# tap repo at lifefarmer/homebrew-wordbrain. Users install with:
+#
+#   brew install lifefarmer/wordbrain/wordbrain
+#
+# Prerequisites (one-time):
+#   1. Create the tap repo:  gh repo create lifefarmer/homebrew-wordbrain --public \
+#                              --description "Homebrew tap for WordBrain"
+#   2. Fine-grained PAT scoped to the tap repo only, permissions =
+#      Contents: Read and write. Save as `HOMEBREW_TAP_TOKEN` repo secret on
+#      lifefarmer/wordbrain.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 

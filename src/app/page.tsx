@@ -5,6 +5,7 @@ import { App as AntApp, Button, Divider, Drawer, Layout, Space, Typography } fro
 import {
   BookOutlined,
   PlusOutlined,
+  ProfileOutlined,
   ReadOutlined,
   SettingOutlined,
   ShareAltOutlined,
@@ -18,12 +19,18 @@ import {
 } from '@/app/components/reader/MaterialImportModal';
 import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
 import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
+import { DictionarySettingsPanel } from '@/app/components/settings/DictionarySettingsPanel';
+import { GeneralSettingsPanel } from '@/app/components/settings/GeneralSettingsPanel';
+import { StatusBar } from '@/app/components/common/StatusBar';
 import { LibraryView } from '@/app/components/library/LibraryView';
 import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
+import { DictionaryFloat } from '@/app/components/dictionary/DictionaryFloat';
 import { NetworkView } from '@/app/components/network/NetworkView';
+import { WordsView } from '@/app/components/words/WordsView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
 import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
+import { useSettingsStore } from '@/app/stores/settingsStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
 import {
   FirstLaunchWizard,
@@ -47,7 +54,7 @@ const { Title, Paragraph, Text } = Typography;
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode = 'reader' | 'library' | 'review' | 'network';
+type ViewMode = 'reader' | 'library' | 'review' | 'network' | 'words';
 
 export default function Home() {
   const { message } = AntApp.useApp();
@@ -79,6 +86,10 @@ export default function Home() {
     let cancelled = false;
     (async () => {
       try {
+        // Load persisted preferences before the updater can read them — if the
+        // user previously paused auto-updates, we don't want a silent check to
+        // fire before the store hydrates.
+        await useSettingsStore.getState().hydrate();
         if (isTauri() && (await needsFirstLaunchWizard())) {
           if (!cancelled) setWizardOpen(true);
           return; // wizard's onFinish triggers the hydrate
@@ -398,6 +409,12 @@ export default function Home() {
             />
           </DueQueueBadge>
           <SidebarEntry
+            icon={<ProfileOutlined />}
+            label="Words"
+            active={view === 'words'}
+            onClick={() => setView('words')}
+          />
+          <SidebarEntry
             icon={<ShareAltOutlined />}
             label="Network"
             active={view === 'network'}
@@ -410,7 +427,19 @@ export default function Home() {
           />
         </Space>
         <Divider style={{ margin: '24px 12px' }} />
-        <div style={{ padding: '0 20px' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Show known words"
+          onClick={() => setView('words')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setView('words');
+            }
+          }}
+          style={{ padding: '0 20px', cursor: 'pointer' }}
+        >
           <Text type="secondary" style={{ fontSize: 12 }}>
             Known words
           </Text>
@@ -428,54 +457,63 @@ export default function Home() {
     <Layout style={{ minHeight: '100vh' }}>
       {sidebar}
 
-      <Content
-        style={{
-          padding: 40,
-          maxWidth: view === 'network' ? undefined : 960,
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {view === 'reader' ? (
-          <ReaderView
-            readerSeed={readerSeed}
-            setImportOpen={setImportOpen}
-            onLemmaDrill={setWordDrawerLemma}
-          />
-        ) : view === 'review' ? (
-          <ReviewSession />
-        ) : view === 'network' ? (
-          <NetworkView
-            refreshKey={libraryRefresh}
-            onOpenMaterial={async (id) => {
-              try {
-                const full = await loadMaterial(id);
-                if (!full) {
-                  message.error('Material not found');
-                  return;
+      <Layout>
+        <Content
+          style={{
+            padding: 40,
+            maxWidth: view === 'network' || view === 'words' ? undefined : 960,
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {view === 'reader' ? (
+            <ReaderView
+              readerSeed={readerSeed}
+              setImportOpen={setImportOpen}
+              onLemmaDrill={setWordDrawerLemma}
+            />
+          ) : view === 'review' ? (
+            <ReviewSession />
+          ) : view === 'network' ? (
+            <NetworkView
+              refreshKey={libraryRefresh}
+              onOpenMaterial={async (id) => {
+                try {
+                  const full = await loadMaterial(id);
+                  if (!full) {
+                    message.error('Material not found');
+                    return;
+                  }
+                  setReaderSeed(full.raw_text);
+                  setActiveMaterialId(id);
+                  setView('reader');
+                } catch (err) {
+                  message.error(`open material failed: ${err}`);
                 }
-                setReaderSeed(full.raw_text);
-                setActiveMaterialId(id);
-                setView('reader');
-              } catch (err) {
-                message.error(`open material failed: ${err}`);
-              }
-            }}
-          />
-        ) : (
-          <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
-        )}
-      </Content>
+              }}
+            />
+          ) : view === 'words' ? (
+            <WordsView onSwitchToReader={() => setView('reader')} />
+          ) : (
+            <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
+          )}
+        </Content>
+        <StatusBar />
+      </Layout>
 
       <Drawer
         title="Settings"
         placement="right"
-        width={520}
+        size={520}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       >
-        <ApiKeysPanel />
+        <Space orientation="vertical" style={{ width: '100%' }} size={12}>
+          <GeneralSettingsPanel />
+          <DictionarySettingsPanel />
+          <ApiKeysPanel />
+        </Space>
       </Drawer>
 
       <MaterialsForWordDrawer
@@ -508,6 +546,8 @@ export default function Home() {
           await hydrateFromDb();
         }}
       />
+
+      <DictionaryFloat onOpenSettings={() => setSettingsOpen(true)} />
     </Layout>
   );
 }

@@ -1,0 +1,116 @@
+name: Update Homebrew Cask
+
+# Runs after a GitHub release is published (by release.yml) or on manual
+# workflow_dispatch. Downloads the universal macOS DMG, computes sha256, and
+# writes Casks/wordbrain.rb into the tap repo at lifefarmer/homebrew-wordbrain
+# via `gh api PUT`.
+#
+# Injection safety: every ${{ ... }} expression is captured in an `env:` block
+# first and referenced via $VAR in run: steps, per
+# https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+#
+# Prerequisites (one-time):
+#   1. gh repo create lifefarmer/homebrew-wordbrain --public \
+#        --description "Homebrew tap for WordBrain"
+#   2. Fine-grained PAT scoped to the tap repo only, Contents: Read and write.
+#      Save as HOMEBREW_TAP_TOKEN on lifefarmer/wordbrain.
+#
+# DMG filename assumption: Tauri 2.x + productName "WordBrain" + target
+# universal-apple-darwin produces WordBrain_<version>_universal.dmg. The
+# release.yml collect step (line 86) globs all *.dmg from the bundle dir, so
+# this is the only DMG present for macOS. Adjust DMG_NAME below if a future
+# Tauri release changes the naming convention.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish to Homebrew (for example v0.1.1)
+        required: true
+        type: string
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      DISPATCH_TAG: ${{ inputs.tag }}
+      TAP_OWNER: lifefarmer
+      TAP_REPO: homebrew-wordbrain
+      APP_REPO: lifefarmer/wordbrain
+    steps:
+      - name: Resolve tag + version
+        id: resolve
+        run: |
+          TAG="${RELEASE_TAG:-$DISPATCH_TAG}"
+          case "$TAG" in
+            v[0-9]*)
+              ;;
+            *)
+              echo "::error::Refusing to proceed with non-semver tag: $TAG"
+              exit 1
+              ;;
+          esac
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download DMG + compute sha256
+        id: sha
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          DMG_NAME="WordBrain_${VERSION}_universal.dmg"
+          echo "dmg=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+          curl -fsSL "https://github.com/${APP_REPO}/releases/download/${TAG}/${DMG_NAME}" -o universal.dmg
+          SHA="$(sha256sum universal.dmg | cut -d ' ' -f1)"
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Write cask to tap repo
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          cat > /tmp/wordbrain.rb <<EOF
+          cask "wordbrain" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "https://github.com/${APP_REPO}/releases/download/v#{version}/WordBrain_#{version}_universal.dmg"
+            name "WordBrain"
+            desc "Local-first English vocabulary builder with FSRS review and word-network graphs"
+            homepage "https://github.com/${APP_REPO}"
+            license "MIT"
+
+            app "WordBrain.app"
+
+            zap trash: [
+              "~/Library/Application Support/com.lifefarmer.wordbrain",
+              "~/Library/Caches/com.lifefarmer.wordbrain",
+              "~/Library/Preferences/com.lifefarmer.wordbrain.plist",
+              "~/Library/Saved Application State/com.lifefarmer.wordbrain.savedState",
+            ]
+          end
+          EOF
+
+          ENCODED="$(base64 -w 0 /tmp/wordbrain.rb)"
+          EXISTING_SHA="$(gh api "repos/${TAP_OWNER}/${TAP_REPO}/contents/Casks/wordbrain.rb" --jq '.sha' 2>/dev/null || true)"
+
+          if [ -n "${EXISTING_SHA}" ]; then
+            gh api "repos/${TAP_OWNER}/${TAP_REPO}/contents/Casks/wordbrain.rb" \
+              --method PUT \
+              --field message="chore: update wordbrain cask to ${VERSION}" \
+              --field content="${ENCODED}" \
+              --field sha="${EXISTING_SHA}"
+          else
+            gh api "repos/${TAP_OWNER}/${TAP_REPO}/contents/Casks/wordbrain.rb" \
+              --method PUT \
+              --field message="chore: add wordbrain cask ${VERSION}" \
+              --field content="${ENCODED}"
+          fi

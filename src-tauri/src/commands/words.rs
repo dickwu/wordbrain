@@ -86,6 +86,36 @@ pub async fn count_known() -> Result<u64, String> {
         .map_err(|e| format!("count known: {e}"))
 }
 
+#[tauri::command]
+pub async fn list_words(
+    filter: db::words::ListWordsFilter,
+) -> Result<Vec<db::words::WordRecord>, String> {
+    db::words::list_words(&filter)
+        .await
+        .map_err(|e| format!("list words: {e}"))
+}
+
+#[tauri::command]
+pub async fn bulk_unmark_known(lemmas: Vec<String>) -> Result<u64, String> {
+    db::words::bulk_unmark_known(&lemmas)
+        .await
+        .map_err(|e| format!("bulk unmark known: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_word_state(lemma: String, state: String) -> Result<(), String> {
+    db::words::set_word_state(&lemma, &state)
+        .await
+        .map_err(|e| format!("set word state: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_user_note(lemma: String, note: Option<String>) -> Result<(), String> {
+    db::words::set_user_note(&lemma, note.as_deref())
+        .await
+        .map_err(|e| format!("set user note: {e}"))
+}
+
 /// Preview slice for the onboarding slider: returns (rank, lemma) pairs for
 /// ranks around the requested cutoff so the wizard can show "≈X% unknown".
 #[tauri::command]

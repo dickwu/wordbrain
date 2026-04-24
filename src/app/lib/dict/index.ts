@@ -39,6 +39,78 @@ export interface AiLookupResult {
   elapsed_ms: number;
 }
 
+export interface CustomDictionary {
+  id: number;
+  name: string;
+  source_path: string;
+  mdx_path: string;
+  entry_count: number;
+  imported_at: number;
+  updated_at: number;
+  storage_kind: 'database' | 'external';
+  mdx_size: number;
+  asset_count: number;
+  resource_archive_count: number;
+  resource_archive_size: number;
+  cloud_file_count: number;
+  cloud_file_size: number;
+}
+
+export interface CustomDictionaryLookupEntry {
+  dictionary_id: number;
+  dictionary_name: string;
+  headword: string;
+  definition_html: string;
+  definition_page_html: string;
+  definition_text: string;
+  resolved_from: string | null;
+}
+
+export interface CustomDictionaryLookupResult {
+  query: string;
+  entries: CustomDictionaryLookupEntry[];
+  elapsed_ms: number;
+}
+
+export interface DictionaryCloudConfig {
+  enabled: boolean;
+  uploadEnabled: boolean;
+  endpointScheme: string;
+  endpointHost: string;
+  bucket: string;
+  publicDomainScheme: string;
+  publicDomainHost: string;
+  prefix: string;
+  hasAccessKeyId: boolean;
+  hasSecretAccessKey: boolean;
+  hasApiToken: boolean;
+}
+
+export interface DictionaryCloudConfigInput {
+  enabled?: boolean;
+  uploadEnabled?: boolean;
+  endpointScheme?: string;
+  endpointHost?: string;
+  bucket?: string;
+  publicDomainScheme?: string;
+  publicDomainHost?: string;
+  prefix?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  apiToken?: string;
+}
+
+export interface DictionaryResourceUploadResult {
+  dictionaryCount: number;
+  pageAssetCount: number;
+  archiveResourceCount: number;
+  uploadedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  uploadedBytes: number;
+  firstError: string | null;
+}
+
 export async function lookupOffline(lemma: string): Promise<OfflineLookupResult> {
   if (!isTauri()) {
     return { entry: null, elapsed_ms: 0 };
@@ -46,11 +118,84 @@ export async function lookupOffline(lemma: string): Promise<OfflineLookupResult>
   return invoke<OfflineLookupResult>('lookup_offline', { lemma });
 }
 
+export async function importCustomDictionary(
+  path: string,
+  opts?: { cssPath?: string | null }
+): Promise<CustomDictionary> {
+  if (!isTauri()) {
+    throw new Error('dictionary import requires Tauri runtime');
+  }
+  return invoke<CustomDictionary>('import_custom_dictionary', {
+    path,
+    cssPath: opts?.cssPath?.trim() || null,
+  });
+}
+
+export async function listCustomDictionaries(): Promise<CustomDictionary[]> {
+  if (!isTauri()) return [];
+  return invoke<CustomDictionary[]>('list_custom_dictionaries');
+}
+
+export async function lookupCustomDictionary(
+  query: string,
+  opts?: { dictionaryId?: number | null; limit?: number }
+): Promise<CustomDictionaryLookupResult> {
+  if (!isTauri()) {
+    return { query, entries: [], elapsed_ms: 0 };
+  }
+  return invoke<CustomDictionaryLookupResult>('lookup_custom_dictionary', {
+    query,
+    dictionaryId: opts?.dictionaryId ?? null,
+    limit: opts?.limit ?? null,
+  });
+}
+
+export async function getDictionaryCloudConfig(): Promise<DictionaryCloudConfig> {
+  if (!isTauri()) {
+    return {
+      enabled: false,
+      uploadEnabled: false,
+      endpointScheme: 'https',
+      endpointHost: '',
+      bucket: '',
+      publicDomainScheme: 'https',
+      publicDomainHost: '',
+      prefix: 'wordbrain/dictionaries',
+      hasAccessKeyId: false,
+      hasSecretAccessKey: false,
+      hasApiToken: false,
+    };
+  }
+  return invoke<DictionaryCloudConfig>('get_dictionary_cloud_config');
+}
+
+export async function saveDictionaryCloudConfig(
+  config: DictionaryCloudConfigInput
+): Promise<DictionaryCloudConfig> {
+  if (!isTauri()) {
+    throw new Error('dictionary resource cloud config requires Tauri runtime');
+  }
+  return invoke<DictionaryCloudConfig>('save_dictionary_cloud_config', { config });
+}
+
+export async function uploadDictionaryResources(opts?: {
+  dictionaryId?: number | null;
+  force?: boolean;
+}): Promise<DictionaryResourceUploadResult> {
+  if (!isTauri()) {
+    throw new Error('dictionary resource upload requires Tauri runtime');
+  }
+  return invoke<DictionaryResourceUploadResult>('upload_dictionary_resources', {
+    dictionaryId: opts?.dictionaryId ?? null,
+    force: opts?.force ?? false,
+  });
+}
+
 export type OnlineProvider = 'youdao' | 'deepl';
 
 export async function lookupOnline(
   lemma: string,
-  provider: OnlineProvider,
+  provider: OnlineProvider
 ): Promise<OnlineLookupResult> {
   if (!isTauri()) {
     throw new Error('online lookup requires Tauri runtime');
@@ -64,7 +209,7 @@ export async function lookupAi(
   lemma: string,
   contextSentence: string,
   provider: AiProvider,
-  model: string,
+  model: string
 ): Promise<AiLookupResult> {
   if (!isTauri()) {
     throw new Error('ai lookup requires Tauri runtime');

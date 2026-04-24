@@ -67,7 +67,7 @@ export function MaterialsForWordDrawer({
       title={lemma ? `Docs containing “${lemma}”` : 'Materials'}
       open={open}
       onClose={onClose}
-      width={520}
+      size={520}
       placement="right"
     >
       {err && <Text type="danger">{err}</Text>}

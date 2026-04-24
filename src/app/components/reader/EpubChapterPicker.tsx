@@ -59,8 +59,7 @@ export function EpubChapterPicker({
       return savedChapters.map((m, i) => ({
         key: `m-${m.id}`,
         title: m.title,
-        subtitle:
-          m.chapter_index !== null ? `Chapter ${m.chapter_index + 1}` : `Chapter ${i + 1}`,
+        subtitle: m.chapter_index !== null ? `Chapter ${m.chapter_index + 1}` : `Chapter ${i + 1}`,
         wordCount: m.total_tokens,
         unknownRatio: m.unique_tokens > 0 ? m.unknown_count / m.unique_tokens : 0,
       }));
@@ -79,7 +78,7 @@ export function EpubChapterPicker({
         </Space>
       }
       placement="left"
-      width={420}
+      size={420}
       open={open}
       onClose={onClose}
     >

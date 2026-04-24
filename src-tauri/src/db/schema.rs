@@ -147,6 +147,62 @@ pub async fn apply(conn: &Connection) -> DbResult<()> {
     )
     .await?;
 
+    // 4.7b User-imported MDict dictionaries. WordBrain stores the MDX index in
+    // the local SQLite DB so lookups do not depend on the original folder after
+    // import. Small page assets such as CSS are kept beside the MDX blob.
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS custom_dictionaries (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT    NOT NULL,
+          source_path TEXT    NOT NULL UNIQUE,
+          mdx_path    TEXT    NOT NULL,
+          entry_count INTEGER NOT NULL,
+          imported_at INTEGER NOT NULL,
+          updated_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_dict_updated ON custom_dictionaries(updated_at);
+
+        CREATE TABLE IF NOT EXISTS custom_dictionary_files (
+          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
+          role          TEXT    NOT NULL,
+          file_name     TEXT    NOT NULL,
+          media_type    TEXT    NOT NULL,
+          content       BLOB    NOT NULL,
+          byte_size     INTEGER NOT NULL,
+          updated_at    INTEGER NOT NULL,
+          PRIMARY KEY (dictionary_id, role, file_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_dict_files_dictionary
+          ON custom_dictionary_files(dictionary_id, role);
+
+        CREATE TABLE IF NOT EXISTS custom_dictionary_resource_archives (
+          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
+          file_name     TEXT    NOT NULL,
+          source_path   TEXT    NOT NULL,
+          cache_path    TEXT    NOT NULL,
+          byte_size     INTEGER NOT NULL,
+          updated_at    INTEGER NOT NULL,
+          PRIMARY KEY (dictionary_id, file_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_dict_archives_dictionary
+          ON custom_dictionary_resource_archives(dictionary_id);
+
+        CREATE TABLE IF NOT EXISTS custom_dictionary_cloud_files (
+          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
+          file_name     TEXT    NOT NULL,
+          media_type    TEXT    NOT NULL,
+          public_url    TEXT    NOT NULL,
+          byte_size     INTEGER NOT NULL,
+          updated_at    INTEGER NOT NULL,
+          PRIMARY KEY (dictionary_id, file_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_dict_cloud_files_dictionary
+          ON custom_dictionary_cloud_files(dictionary_id);
+        ",
+    )
+    .await?;
+
     // 4.8 Key-value settings
     conn.execute_batch(
         "

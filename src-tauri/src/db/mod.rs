@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 use turso::{Builder, Connection};
 
 pub mod cache;
+pub mod custom_dicts;
 pub mod dict;
 pub mod materials;
 pub mod network;
@@ -68,11 +69,6 @@ pub async fn init(app: &AppHandle) -> Result<()> {
     DB_CONNECTION
         .set(Mutex::new(conn))
         .map_err(|_| anyhow::anyhow!("wordbrain db already initialised"))?;
-
-    // Then bootstrap the bundled offline dictionary (separate sqlite file).
-    dict::bootstrap(app)
-        .await
-        .map_err(|e| anyhow::anyhow!("bootstrap ecdict: {e}"))?;
 
     Ok(())
 }

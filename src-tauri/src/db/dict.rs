@@ -23,6 +23,7 @@ use turso::{Builder, Connection};
 use super::DbResult;
 
 static DICT_CONNECTION: OnceLock<Mutex<Connection>> = OnceLock::new();
+static DICT_BOOTSTRAP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Minimum row count we accept before considering the bundle healthy. Any
 /// smaller and we treat the file as corrupt and re-copy from the asset.
@@ -45,6 +46,21 @@ pub fn get_connection() -> DbResult<&'static Mutex<Connection>> {
     DICT_CONNECTION
         .get()
         .ok_or_else(|| "offline dictionary not bootstrapped".into())
+}
+
+async fn ensure_bootstrapped(app: &AppHandle) -> Result<()> {
+    if DICT_CONNECTION.get().is_some() {
+        return Ok(());
+    }
+    let lock = DICT_BOOTSTRAP_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
+    if DICT_CONNECTION.get().is_none() {
+        bootstrap(app).await?;
+    }
+    drop(lock);
+    Ok(())
 }
 
 /// Resolve the bundled ECDICT asset path. In dev mode Tauri resolves
@@ -89,7 +105,10 @@ async fn ensure_local_copy(app: &AppHandle) -> Result<PathBuf> {
     if need_copy {
         log::info!(
             "[wordbrain] copying bundled ecdict.db ({} MB) → {}",
-            bundle.metadata().map(|m| m.len() / 1024 / 1024).unwrap_or(0),
+            bundle
+                .metadata()
+                .map(|m| m.len() / 1024 / 1024)
+                .unwrap_or(0),
             target.display()
         );
         tokio::fs::copy(&bundle, &target).await?;
@@ -112,30 +131,35 @@ async fn open(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-/// Open the bundled ECDICT db, verify it has ≥ `MIN_ROWS` rows, and stash the
-/// connection as a singleton.
+/// Open the bundled ECDICT db, verify it looks healthy, and stash the
+/// connection as a singleton. This is lazy so first app paint does not wait on
+/// copying or scanning the large dictionary bundle.
 pub async fn bootstrap(app: &AppHandle) -> Result<()> {
     let path = ensure_local_copy(app).await?;
     let conn = open(&path).await?;
 
-    // Defensive: confirm the bundle actually carries dictionary_entries rows.
+    // Defensive: confirm the bundle actually carries dictionary_entries rows
+    // without paying for COUNT(*) over the whole table on first launch.
     let mut rows = conn
-        .query("SELECT COUNT(*) FROM dictionary_entries", ())
+        .query(
+            "SELECT rowid FROM dictionary_entries ORDER BY rowid DESC LIMIT 1",
+            (),
+        )
         .await
-        .map_err(|e| anyhow::anyhow!("count ecdict rows: {e}"))?;
-    let count: i64 = rows
+        .map_err(|e| anyhow::anyhow!("probe ecdict rows: {e}"))?;
+    let max_rowid: i64 = rows
         .next()
         .await
-        .map_err(|e| anyhow::anyhow!("read ecdict count: {e}"))?
-        .ok_or_else(|| anyhow::anyhow!("empty count(*) result"))?
+        .map_err(|e| anyhow::anyhow!("read ecdict probe: {e}"))?
+        .ok_or_else(|| anyhow::anyhow!("empty dictionary_entries table"))?
         .get(0)
-        .map_err(|e| anyhow::anyhow!("count(*) cast: {e}"))?;
-    if count < MIN_ROWS {
+        .map_err(|e| anyhow::anyhow!("rowid cast: {e}"))?;
+    if max_rowid < MIN_ROWS {
         return Err(anyhow::anyhow!(
-            "ecdict bundle only has {count} rows (< {MIN_ROWS}); asset may be corrupt"
+            "ecdict bundle has an unexpectedly small dictionary_entries table; asset may be corrupt"
         ));
     }
-    log::info!("[wordbrain] offline dict ready: {count} entries");
+    log::info!("[wordbrain] offline dict ready");
 
     DICT_CONNECTION
         .set(Mutex::new(conn))
@@ -146,7 +170,10 @@ pub async fn bootstrap(app: &AppHandle) -> Result<()> {
 /// Fetch the first ECDICT entry for `lemma` (case-insensitive). If the lemma
 /// has multiple POS rows we return the first one — richer layouts can stitch
 /// the rest client-side later.
-pub async fn lookup_offline_on_conn(conn: &Connection, lemma: &str) -> DbResult<Option<OfflineEntry>> {
+pub async fn lookup_offline_on_conn(
+    conn: &Connection,
+    lemma: &str,
+) -> DbResult<Option<OfflineEntry>> {
     let needle = lemma.trim().to_lowercase();
     if needle.is_empty() {
         return Ok(None);
@@ -180,7 +207,10 @@ pub async fn lookup_offline_on_conn(conn: &Connection, lemma: &str) -> DbResult<
     }
 }
 
-pub async fn lookup_offline(lemma: &str) -> DbResult<Option<OfflineEntry>> {
+pub async fn lookup_offline(app: &AppHandle, lemma: &str) -> DbResult<Option<OfflineEntry>> {
+    ensure_bootstrapped(app)
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
     let conn = get_connection()?.lock().await;
     lookup_offline_on_conn(&conn, lemma).await
 }

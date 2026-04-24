@@ -23,8 +23,8 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use sha1::{Digest, Sha1};
 use tauri::{AppHandle, Manager};
-use tokio::sync::Mutex;
 use tauri_plugin_stronghold::stronghold::Stronghold;
+use tokio::sync::Mutex;
 
 const CLIENT_NAME: &[u8] = b"wordbrain-keys";
 const SALT: &[u8] = b"wordbrain-stronghold-salt-v1";
@@ -50,17 +50,24 @@ impl KeyVault {
         std::fs::create_dir_all(&app_dir).map_err(|e| anyhow!("mkdir app data: {e}"))?;
         let snapshot_path = app_dir.join("wordbrain.stronghold");
 
+        let snapshot_exists = snapshot_path.exists();
         let password = derive_password(&snapshot_path);
         let sh = Stronghold::new(snapshot_path.clone(), password)
             .map_err(|e| anyhow!("load stronghold snapshot: {e}"))?;
 
         // Ensure a client exists. `load_client` fails if the client has not
         // been created yet; on fresh install we create one.
-        let create_or_load = sh.load_client(CLIENT_NAME).or_else(|_| sh.create_client(CLIENT_NAME));
-        create_or_load.map_err(|e| anyhow!("stronghold client: {e}"))?;
+        let client_loaded = sh.load_client(CLIENT_NAME).is_ok();
+        if !client_loaded {
+            sh.create_client(CLIENT_NAME)
+                .map_err(|e| anyhow!("stronghold client: {e}"))?;
+        }
 
-        // Flush a fresh snapshot so subsequent starts find the client record.
-        sh.save().map_err(|e| anyhow!("save stronghold: {e}"))?;
+        // Flush only when the snapshot/client is new. Rewriting it on every
+        // launch adds avoidable startup I/O.
+        if !snapshot_exists || !client_loaded {
+            sh.save().map_err(|e| anyhow!("save stronghold: {e}"))?;
+        }
 
         Ok(Self {
             inner: Arc::new(Mutex::new(sh)),
@@ -80,7 +87,30 @@ impl KeyVault {
             .store()
             .insert(key.as_bytes().to_vec(), value.to_vec(), None)
             .map_err(|e| anyhow!("stronghold insert: {e}"))?;
-        sh.save().map_err(|e| anyhow!("stronghold save snapshot: {e}"))?;
+        sh.save()
+            .map_err(|e| anyhow!("stronghold save snapshot: {e}"))?;
+        Ok(())
+    }
+
+    /// Persist multiple logical secrets with one snapshot flush.
+    pub async fn save_many(&self, entries: Vec<(String, Vec<u8>)>) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let sh = self.inner.lock().await;
+        let client = sh
+            .load_client(CLIENT_NAME)
+            .or_else(|_| sh.create_client(CLIENT_NAME))
+            .map_err(|e| anyhow!("stronghold client (save): {e}"))?;
+        for (provider, value) in entries {
+            let key = provider_key(&provider);
+            client
+                .store()
+                .insert(key.as_bytes().to_vec(), value, None)
+                .map_err(|e| anyhow!("stronghold insert: {e}"))?;
+        }
+        sh.save()
+            .map_err(|e| anyhow!("stronghold save snapshot: {e}"))?;
         Ok(())
     }
 
@@ -117,7 +147,8 @@ impl KeyVault {
             .store()
             .delete(key.as_bytes())
             .map_err(|e| anyhow!("stronghold delete: {e}"))?;
-        sh.save().map_err(|e| anyhow!("stronghold save snapshot: {e}"))?;
+        sh.save()
+            .map_err(|e| anyhow!("stronghold save snapshot: {e}"))?;
         Ok(())
     }
 

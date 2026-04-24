@@ -28,8 +28,7 @@ pub fn run() {
             let handle = app.handle().clone();
             // Initialise the BYOK stronghold vault synchronously so state is
             // available to the first command that needs a key.
-            let vault = KeyVault::init(&handle)
-                .map_err(|e| format!("stronghold vault: {e}"))?;
+            let vault = KeyVault::init(&handle).map_err(|e| format!("stronghold vault: {e}"))?;
             handle.manage(vault);
 
             let handle_db = handle.clone();
@@ -47,10 +46,20 @@ pub fn run() {
             commands::words::mark_known,
             commands::words::unmark_known,
             commands::words::count_known,
+            commands::words::list_words,
+            commands::words::bulk_unmark_known,
+            commands::words::set_word_state,
+            commands::words::set_user_note,
             commands::words::frequency_preview,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::dict::lookup_offline,
+            commands::dict::get_dictionary_cloud_config,
+            commands::dict::save_dictionary_cloud_config,
+            commands::dict::import_custom_dictionary,
+            commands::dict::list_custom_dictionaries,
+            commands::dict::upload_dictionary_resources,
+            commands::dict::lookup_custom_dictionary,
             commands::dict::lookup_online,
             commands::dict::lookup_ai,
             commands::keys::save_api_key,

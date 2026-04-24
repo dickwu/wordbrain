@@ -3,12 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Slider, Typography, Space, Tag, Button, App as AntApp } from 'antd';
 import { hydrateFromDb } from '@/app/stores/wordStore';
-import {
-  frequencyPreview,
-  getSetting,
-  seedKnownFromFrequency,
-  isTauri,
-} from '@/app/lib/ipc';
+import { frequencyPreview, getSetting, seedKnownFromFrequency, isTauri } from '@/app/lib/ipc';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -32,7 +27,7 @@ function estimateUnknownPct(cutoff: number): number {
     Math.abs(Math.log(p.cutoff) - Math.log(cutoff)) <
     Math.abs(Math.log(best.cutoff) - Math.log(cutoff))
       ? p
-      : best,
+      : best
   );
   return unknownPct;
 }
@@ -74,7 +69,7 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
       const inserted = await seedKnownFromFrequency(cutoff);
       await hydrateFromDb();
       message.success(
-        `Seeded ${inserted.toLocaleString()} known words. Typical news articles should show ≈${unknownPct}% unknown.`,
+        `Seeded ${inserted.toLocaleString()} known words. Typical news articles should show ≈${unknownPct}% unknown.`
       );
       onFinish();
     } catch (err) {
@@ -89,7 +84,7 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
     <Modal
       open={open}
       closable={false}
-      maskClosable={false}
+      mask={{ closable: false }}
       footer={null}
       width={620}
       title="Welcome to WordBrain"
@@ -97,18 +92,16 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Paragraph style={{ marginBottom: 0 }}>
-          Pick the point on the frequency list up to which you already know every word. We'll
-          treat everything above that rank as <Text strong>known</Text> and only highlight the
-          rest as you read.
+          Pick the point on the frequency list up to which you already know every word. We'll treat
+          everything above that rank as <Text strong>known</Text> and only highlight the rest as you
+          read.
         </Paragraph>
 
         <div>
           <Title level={5} style={{ marginBottom: 4 }}>
             I know the top {cutoff.toLocaleString()} most-common English words
           </Title>
-          <Text type="secondary">
-            Typical news articles will show ≈{unknownPct}% unknown.
-          </Text>
+          <Text type="secondary">Typical news articles will show ≈{unknownPct}% unknown.</Text>
           <Slider
             min={MIN}
             max={MAX}
@@ -116,7 +109,7 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
             value={cutoff}
             onChange={(v) => setCutoff(Array.isArray(v) ? v[0] : v)}
             marks={Object.fromEntries(
-              CUTOFF_PRESETS.map((p) => [p.cutoff, <span key={p.cutoff}>{p.label}</span>]),
+              CUTOFF_PRESETS.map((p) => [p.cutoff, <span key={p.cutoff}>{p.label}</span>])
             )}
             tooltip={{ formatter: (v) => (v ? v.toLocaleString() : '') }}
           />
@@ -128,7 +121,11 @@ export function FirstLaunchWizard({ open, onFinish }: Props) {
           </Text>
           <div style={{ marginTop: 6, minHeight: 32 }}>
             {preview.map(([rank, lemma]) => (
-              <Tag key={rank} color={rank <= cutoff ? 'blue' : 'default'} style={{ marginBottom: 4 }}>
+              <Tag
+                key={rank}
+                color={rank <= cutoff ? 'blue' : 'default'}
+                style={{ marginBottom: 4 }}
+              >
                 #{rank.toLocaleString()} {lemma}
               </Tag>
             ))}

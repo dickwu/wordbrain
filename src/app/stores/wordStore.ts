@@ -8,6 +8,8 @@ interface WordState {
   hydrated: boolean;
   markKnown: (lemma: string) => void;
   unmark: (lemma: string) => void;
+  bulkUnmark: (lemmas: string[]) => void;
+  setState: (lemma: string, state: 'known' | 'learning' | 'unknown') => void;
   isKnown: (lemma: string) => boolean;
   hydrateFrom: (lemmas: Iterable<string>) => void;
   /** Monotonic counter; bump on every mutation so Tiptap can rebuild decorations. */
@@ -51,6 +53,37 @@ export const useWordStore = create<WordState>((set, get) => ({
         console.error('[wordbrain] unmark_known IPC failed', err);
       });
     }
+  },
+  // Pure in-memory bulk removal. IPC is handled by the caller (mutation hook).
+  bulkUnmark: (lemmas) => {
+    const keys = lemmas.map((l) => l.toLowerCase());
+    set((s) => {
+      let changed = false;
+      const next = new Set(s.known);
+      for (const k of keys) {
+        if (next.delete(k)) changed = true;
+      }
+      if (!changed) return s;
+      return { known: next, version: s.version + 1 };
+    });
+  },
+  // Pure in-memory state transition. IPC is handled by the caller (mutation hook).
+  setState: (lemma, state) => {
+    const key = lemma.toLowerCase();
+    set((s) => {
+      const has = s.known.has(key);
+      if (state === 'known') {
+        if (has) return s;
+        const next = new Set(s.known);
+        next.add(key);
+        return { known: next, version: s.version + 1 };
+      }
+      // learning | unknown — remove from known set so the reader stops highlighting.
+      if (!has) return s;
+      const next = new Set(s.known);
+      next.delete(key);
+      return { known: next, version: s.version + 1 };
+    });
   },
   isKnown: (lemma) => get().known.has(lemma.toLowerCase()),
   hydrateFrom: (lemmas) => {
