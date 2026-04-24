@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Popover, Button, Typography, Tag, Space, Tabs, Spin, Select, Alert } from 'antd';
-import { CheckOutlined, CloseOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, LinkOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { WordHighlightClickPayload } from './WordHighlightExtension';
 import {
   lookupOffline,
@@ -23,6 +23,8 @@ interface WordCardPopoverProps {
   onMarkKnown: () => void;
   /** Sentence containing the word — fed to lookup_ai for contextual gloss. */
   contextSentence?: string;
+  /** Optional hook: if provided a "Related docs" button surfaces the drawer. */
+  onDrillLemma?: () => void;
 }
 
 export function WordCardPopover({
@@ -30,6 +32,7 @@ export function WordCardPopover({
   onClose,
   onMarkKnown,
   contextSentence,
+  onDrillLemma,
 }: WordCardPopoverProps) {
   const style: React.CSSProperties = {
     position: 'fixed',
@@ -71,10 +74,7 @@ export function WordCardPopover({
             key: 'ai',
             label: '智能',
             children: (
-              <AiTab
-                lemma={payload.lemma}
-                contextSentence={contextSentence ?? payload.surface}
-              />
+              <AiTab lemma={payload.lemma} contextSentence={contextSentence ?? payload.surface} />
             ),
           },
         ]}
@@ -84,6 +84,11 @@ export function WordCardPopover({
         <Button type="primary" size="small" icon={<CheckOutlined />} onClick={onMarkKnown}>
           Mark known
         </Button>
+        {onDrillLemma && (
+          <Button size="small" icon={<LinkOutlined />} onClick={onDrillLemma}>
+            Related docs
+          </Button>
+        )}
         <Button size="small" icon={<CloseOutlined />} onClick={onClose}>
           Close
         </Button>
@@ -155,9 +160,7 @@ function OfflineTab({ lemma }: { lemma: string }) {
         <CacheBadge label="bundled" elapsed={elapsed} cached={true} />
       </div>
       {entry.definitions_zh && (
-        <Paragraph
-          style={{ fontSize: 13, marginBottom: 4, whiteSpace: 'pre-wrap' }}
-        >
+        <Paragraph style={{ fontSize: 13, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
           {entry.definitions_zh}
         </Paragraph>
       )}
@@ -216,7 +219,11 @@ function OnlineTab({ lemma }: { lemma: string }) {
         <div>
           <div style={{ marginBottom: 4 }}>
             <Tag color="blue">{result.provider}</Tag>
-            <CacheBadge label={result.provider} elapsed={result.elapsed_ms} cached={result.cached} />
+            <CacheBadge
+              label={result.provider}
+              elapsed={result.elapsed_ms}
+              cached={result.cached}
+            />
           </div>
           <Paragraph style={{ fontSize: 13, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
             {result.translation_zh || <Text type="secondary">(empty response)</Text>}

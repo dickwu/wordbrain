@@ -17,6 +17,8 @@ import { WordCardPopover } from './WordCardPopover';
 interface ReaderPaneProps {
   initialContent?: string;
   placeholder?: string;
+  /** Optional hook: called when the word card's "Related docs" button is clicked. */
+  onDrillLemma?: (lemma: string) => void;
 }
 
 /** Crude sentence chunker: grabs the period/question/exclamation-bounded slice
@@ -30,7 +32,7 @@ function extractSentence(text: string, surface: string): string {
     lower.lastIndexOf('.', idx),
     lower.lastIndexOf('?', idx),
     lower.lastIndexOf('!', idx),
-    lower.lastIndexOf('\n', idx),
+    lower.lastIndexOf('\n', idx)
   );
   const afterCandidates = [
     lower.indexOf('.', idx + needle.length),
@@ -45,6 +47,7 @@ function extractSentence(text: string, surface: string): string {
 export function ReaderPane({
   initialContent = '',
   placeholder = 'Paste or type English text here — unknown words will be highlighted as you go.',
+  onDrillLemma,
 }: ReaderPaneProps) {
   const { message } = AntApp.useApp();
   const [popover, setPopover] = useState<WordHighlightClickPayload | null>(null);
@@ -118,6 +121,14 @@ export function ReaderPane({
             message.success(`Marked "${popover.surface}" as known`);
             setPopover(null);
           }}
+          onDrillLemma={
+            onDrillLemma
+              ? () => {
+                  onDrillLemma(popover.lemma);
+                  setPopover(null);
+                }
+              : undefined
+          }
         />
       )}
     </div>

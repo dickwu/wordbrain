@@ -3,6 +3,7 @@
 
 pub mod dict;
 pub mod keys;
+pub mod materials;
 pub mod settings;
 pub mod words;
 

@@ -17,6 +17,7 @@ use turso::{Builder, Connection};
 
 pub mod cache;
 pub mod dict;
+pub mod materials;
 pub mod schema;
 pub mod settings;
 pub mod words;
