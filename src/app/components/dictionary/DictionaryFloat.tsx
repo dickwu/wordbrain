@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -11,6 +11,7 @@ import {
   Select,
   Space,
   Spin,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -23,8 +24,43 @@ import {
   type CustomDictionaryLookupResult,
 } from '@/app/lib/dict';
 import { isTauri } from '@/app/lib/ipc';
+import { AiTab, OfflineTab, OnlineTab } from './LookupTabs';
 
 const { Text, Title } = Typography;
+
+const WORD_RE = /^[A-Za-z][A-Za-z'’-]*$/;
+
+/** True when `value` is a single English word we should hand to the dictionary. */
+export function isLookupCandidate(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return WORD_RE.test(value.trim());
+}
+
+/** Normalize raw selection / clipboard text to a canonical lemma surface. Returns
+ * an empty string when the input isn't a lookup-able single word. */
+export function normalizeLookupQuery(value: string | null | undefined): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!WORD_RE.test(trimmed)) return '';
+  return trimmed.toLowerCase();
+}
+
+/** CSS selector for elements where double-click should NOT pop the dictionary —
+ * native form fields, interactive controls, the Tiptap reader (which has its own
+ * popover), and the dictionary modal itself (so we can't recursively trigger). */
+const SKIP_DBLCLICK_SELECTOR = [
+  'button',
+  'a[href]',
+  'input',
+  'textarea',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '.ProseMirror',
+  '.ant-btn',
+  '.ant-modal-content',
+].join(', ');
 
 interface DictionaryFloatProps {
   onOpenSettings: () => void;
@@ -33,20 +69,58 @@ interface DictionaryFloatProps {
 export function DictionaryFloat({ onOpenSettings }: DictionaryFloatProps) {
   const [open, setOpen] = useState(false);
   const [initialQuery, setInitialQuery] = useState('');
+  const [autoSearch, setAutoSearch] = useState(false);
 
-  const openModal = () => {
-    const selection = window.getSelection?.()?.toString().trim();
-    const firstWord = selection?.match(/[A-Za-z][A-Za-z'’-]*/)?.[0];
-    setInitialQuery(firstWord?.toLowerCase() ?? '');
+  const openWith = (word: string) => {
+    setInitialQuery(word);
+    setAutoSearch(Boolean(word));
     setOpen(true);
   };
+
+  // FloatButton: try the OS clipboard first (tauri-plugin-clipboard-manager),
+  // fall back to the current selection. If we land on a single English word
+  // we auto-fire the lookup so the user sees the explanation immediately.
+  const openModal = async () => {
+    let seed = window.getSelection?.()?.toString().trim() ?? '';
+    if (!seed && isTauri()) {
+      try {
+        const { readText } = await import('@tauri-apps/plugin-clipboard-manager');
+        seed = (await readText()) ?? '';
+      } catch {
+        // Clipboard refusal (permission / empty / non-text) is non-fatal —
+        // open the modal with no seed.
+      }
+    }
+    openWith(normalizeLookupQuery(seed));
+  };
+
+  // Global double-click → dictionary lookup. We use the capture phase so we
+  // see events before per-component handlers, but bail out for any element
+  // that owns its own click semantics (buttons, links, the Tiptap reader,
+  // form fields, the modal itself).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onDblClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(SKIP_DBLCLICK_SELECTOR)) return;
+      const selection = window.getSelection?.()?.toString();
+      const word = normalizeLookupQuery(selection);
+      if (!word) return;
+      openWith(word);
+    };
+    document.addEventListener('dblclick', onDblClick, true);
+    return () => document.removeEventListener('dblclick', onDblClick, true);
+  }, []);
 
   return (
     <>
       <FloatButton
         icon={<BookOutlined />}
-        tooltip="Dictionary"
-        onClick={openModal}
+        tooltip="Dictionary (double-click any word)"
+        onClick={() => {
+          void openModal();
+        }}
         style={{ right: 32, bottom: 32 }}
       />
 
@@ -54,7 +128,11 @@ export function DictionaryFloat({ onOpenSettings }: DictionaryFloatProps) {
         <DictionaryLookupModal
           visible={true}
           initialQuery={initialQuery}
-          onClose={() => setOpen(false)}
+          autoSearch={autoSearch}
+          onClose={() => {
+            setOpen(false);
+            setAutoSearch(false);
+          }}
           onOpenSettings={onOpenSettings}
         />
       )}
@@ -65,6 +143,8 @@ export function DictionaryFloat({ onOpenSettings }: DictionaryFloatProps) {
 interface DictionaryLookupModalProps {
   visible: boolean;
   initialQuery: string;
+  /** When true and `initialQuery` is non-empty, fire `runLookup` once on mount. */
+  autoSearch?: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
 }
@@ -72,6 +152,7 @@ interface DictionaryLookupModalProps {
 function DictionaryLookupModal({
   visible,
   initialQuery,
+  autoSearch = false,
   onClose,
   onOpenSettings,
 }: DictionaryLookupModalProps) {
@@ -83,6 +164,7 @@ function DictionaryLookupModal({
   const [loading, setLoading] = useState(false);
   const [loadingDictionaries, setLoadingDictionaries] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const ranAutoRef = useRef(false);
 
   const dictionaryOptions = useMemo(
     () => [
@@ -93,6 +175,9 @@ function DictionaryLookupModal({
   );
 
   const activeEntry = result?.entries[activeEntryIndex] ?? null;
+  // Trim once for the secondary tabs; they accept a lemma rather than a free
+  // query, so an empty / non-word query simply renders an inert placeholder.
+  const lemmaForTabs = normalizeLookupQuery(query);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -132,10 +217,75 @@ function DictionaryLookupModal({
     }
   };
 
+  // Auto-fire the custom-dictionary lookup once the dictionaries list is
+  // loaded, when caller asked for it (double-click / clipboard path). Guarded
+  // so we never refire if the user later edits the query.
+  useEffect(() => {
+    if (!autoSearch || ranAutoRef.current) return;
+    if (loadingDictionaries) return;
+    if (!query.trim()) return;
+    ranAutoRef.current = true;
+    void runLookup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSearch, loadingDictionaries, query]);
+
   const openSettings = () => {
     onClose();
     onOpenSettings();
   };
+
+  const tabItems = [
+    {
+      key: 'custom',
+      label: '词典',
+      children: (
+        <CustomDictionaryPane
+          loadingDictionaries={loadingDictionaries}
+          dictionaries={dictionaries}
+          loading={loading}
+          result={result}
+          activeEntry={activeEntry}
+          activeEntryIndex={activeEntryIndex}
+          err={err}
+          onEntryChange={setActiveEntryIndex}
+          onOpenSettings={openSettings}
+        />
+      ),
+    },
+    {
+      key: 'offline',
+      label: '离线',
+      children: lemmaForTabs ? (
+        <OfflineTab lemma={lemmaForTabs} />
+      ) : (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Enter a single English word to look it up offline.
+        </Text>
+      ),
+    },
+    {
+      key: 'online',
+      label: '在线',
+      children: lemmaForTabs ? (
+        <OnlineTab lemma={lemmaForTabs} />
+      ) : (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Enter a single English word to call Youdao / DeepL.
+        </Text>
+      ),
+    },
+    {
+      key: 'ai',
+      label: '智能',
+      children: lemmaForTabs ? (
+        <AiTab lemma={lemmaForTabs} contextSentence={lemmaForTabs} />
+      ) : (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Enter a single English word for an AI gloss.
+        </Text>
+      ),
+    },
+  ];
 
   return (
     <Modal
@@ -148,14 +298,6 @@ function DictionaryLookupModal({
     >
       {!isTauri() ? (
         <Alert type="info" showIcon message="Dictionary lookup requires the Tauri shell." />
-      ) : loadingDictionaries ? (
-        <Spin size="small" />
-      ) : dictionaries.length === 0 ? (
-        <Empty description="No dictionaries imported">
-          <Button icon={<SettingOutlined />} onClick={openSettings}>
-            Settings
-          </Button>
-        </Empty>
       ) : (
         <Space orientation="vertical" style={{ width: '100%' }} size={12}>
           <div
@@ -192,29 +334,70 @@ function DictionaryLookupModal({
             </Space.Compact>
           </div>
 
-          {err && <Alert type="warning" showIcon message={err} />}
-          {loading && <Spin size="small" />}
-
-          {result && !loading && result.entries.length === 0 && (
-            <Empty description={`No entry for "${result.query}"`}>
-              <Button icon={<SettingOutlined />} onClick={openSettings}>
-                Settings
-              </Button>
-            </Empty>
-          )}
-
-          {result && !loading && activeEntry && (
-            <DictionaryPage
-              entries={result.entries}
-              activeEntry={activeEntry}
-              activeEntryIndex={activeEntryIndex}
-              elapsedMs={result.elapsed_ms}
-              onEntryChange={setActiveEntryIndex}
-            />
-          )}
+          <Tabs size="small" defaultActiveKey="custom" items={tabItems} />
         </Space>
       )}
     </Modal>
+  );
+}
+
+interface CustomDictionaryPaneProps {
+  loadingDictionaries: boolean;
+  dictionaries: CustomDictionary[];
+  loading: boolean;
+  result: CustomDictionaryLookupResult | null;
+  activeEntry: CustomDictionaryLookupEntry | null;
+  activeEntryIndex: number;
+  err: string | null;
+  onEntryChange: (index: number) => void;
+  onOpenSettings: () => void;
+}
+
+function CustomDictionaryPane({
+  loadingDictionaries,
+  dictionaries,
+  loading,
+  result,
+  activeEntry,
+  activeEntryIndex,
+  err,
+  onEntryChange,
+  onOpenSettings,
+}: CustomDictionaryPaneProps) {
+  if (loadingDictionaries) return <Spin size="small" />;
+  if (dictionaries.length === 0) {
+    return (
+      <Empty description="No dictionaries imported">
+        <Button icon={<SettingOutlined />} onClick={onOpenSettings}>
+          Settings
+        </Button>
+      </Empty>
+    );
+  }
+
+  return (
+    <div>
+      {err && <Alert type="warning" showIcon message={err} style={{ marginBottom: 8 }} />}
+      {loading && <Spin size="small" />}
+
+      {result && !loading && result.entries.length === 0 && (
+        <Empty description={`No entry for "${result.query}"`}>
+          <Button icon={<SettingOutlined />} onClick={onOpenSettings}>
+            Settings
+          </Button>
+        </Empty>
+      )}
+
+      {result && !loading && activeEntry && (
+        <DictionaryPage
+          entries={result.entries}
+          activeEntry={activeEntry}
+          activeEntryIndex={activeEntryIndex}
+          elapsedMs={result.elapsed_ms}
+          onEntryChange={onEntryChange}
+        />
+      )}
+    </div>
   );
 }
 
