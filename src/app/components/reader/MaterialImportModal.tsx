@@ -8,6 +8,7 @@ import {
   Input,
   Space,
   Tabs,
+  theme,
   Typography,
   Upload,
   App as AntApp,
@@ -63,6 +64,7 @@ export function MaterialImportModal({
   onEpubPicked,
 }: MaterialImportModalProps) {
   const { message } = AntApp.useApp();
+  const { token } = theme.useToken();
   const [raw, setRaw] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +90,7 @@ export function MaterialImportModal({
         }
         if (TEXT_EXTS.some((e) => lower.endsWith(e))) {
           const body = await readTextFile(path);
-          const cleaned =
-            lower.endsWith('.srt') || looksLikeSrt(body) ? stripSrt(body) : body;
+          const cleaned = lower.endsWith('.srt') || looksLikeSrt(body) ? stripSrt(body) : body;
           onFilePicked?.({
             text: cleaned,
             suggestedTitle: deriveTitleFromPath(path),
@@ -125,9 +126,7 @@ export function MaterialImportModal({
         const paths = evt.payload.paths ?? [];
         const picked = paths.find((p) => {
           const l = p.toLowerCase();
-          return (
-            TEXT_EXTS.some((e) => l.endsWith(e)) || EPUB_EXTS.some((e) => l.endsWith(e))
-          );
+          return TEXT_EXTS.some((e) => l.endsWith(e)) || EPUB_EXTS.some((e) => l.endsWith(e));
         });
         if (!picked) {
           setError('Drop a .md, .txt, .srt, or .epub file.');
@@ -150,9 +149,7 @@ export function MaterialImportModal({
     const selected = await openDialog({
       multiple: false,
       directory: false,
-      filters: [
-        { name: 'Reading material', extensions: ['md', 'markdown', 'txt', 'srt', 'epub'] },
-      ],
+      filters: [{ name: 'Reading material', extensions: ['md', 'markdown', 'txt', 'srt', 'epub'] }],
     });
     if (!selected || Array.isArray(selected)) return;
     await ingestPath(selected);
@@ -188,8 +185,8 @@ export function MaterialImportModal({
             children: (
               <>
                 <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                  Paste an article, a few paragraphs, or a chapter excerpt. Tokenisation +
-                  highlight happen instantly against your known-word list.
+                  Paste an article, a few paragraphs, or a chapter excerpt. Tokenisation + highlight
+                  happen instantly against your known-word list.
                 </Paragraph>
                 <TextArea
                   value={raw}
@@ -197,9 +194,7 @@ export function MaterialImportModal({
                   placeholder="Paste text here (≥ 100 characters recommended for a meaningful preview)"
                   autoSize={{ minRows: 10, maxRows: 20 }}
                 />
-                <div
-                  style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}
-                >
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                   <Button onClick={handleCancel}>Cancel</Button>
                   <Button
                     type="primary"
@@ -218,29 +213,27 @@ export function MaterialImportModal({
             children: (
               <>
                 <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                  Drop a <Text code>.md</Text>, <Text code>.txt</Text>, <Text code>.srt</Text>,
-                  or <Text code>.epub</Text> file anywhere in this window, or click below to
-                  open a file picker. SRT timestamps are stripped automatically; EPUBs are
-                  split into chapters.
+                  Drop a <Text code>.md</Text>, <Text code>.txt</Text>, <Text code>.srt</Text>, or{' '}
+                  <Text code>.epub</Text> file anywhere in this window, or click below to open a
+                  file picker. SRT timestamps are stripped automatically; EPUBs are split into
+                  chapters.
                 </Paragraph>
                 <Upload.Dragger
                   multiple={false}
                   showUploadList={false}
                   openFileDialogOnClick={false}
                   beforeUpload={() => false /* I/O is handled via Tauri, not the browser */}
-                  style={{ background: 'rgba(79,70,229,0.03)' }}
+                  style={{ background: token.colorPrimaryBg }}
                 >
                   <p style={{ fontSize: 36, margin: 0 }}>
-                    <InboxOutlined style={{ color: '#4f46e5' }} />
+                    <InboxOutlined style={{ color: token.colorPrimary }} />
                   </p>
                   <p style={{ margin: 0, fontWeight: 500 }}>Drop file here</p>
-                  <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)' }}>
+                  <p style={{ fontSize: 12, color: token.colorTextSecondary }}>
                     .md · .txt · .srt · .epub
                   </p>
                 </Upload.Dragger>
-                <div
-                  style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}
-                >
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
                   <Space>
                     <Button icon={<FolderOpenOutlined />} onClick={pickFile} loading={busy}>
                       Open file…

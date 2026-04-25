@@ -1,9 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Button, Divider, Drawer, Layout, Space, Typography } from 'antd';
+import {
+  App as AntApp,
+  Button,
+  Divider,
+  Drawer,
+  Layout,
+  Space,
+  theme,
+  Tooltip,
+  Typography,
+} from 'antd';
 import {
   BookOutlined,
+  BulbFilled,
+  BulbOutlined,
   PlusOutlined,
   ProfileOutlined,
   ReadOutlined,
@@ -32,6 +44,7 @@ import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
 import { useSettingsStore } from '@/app/stores/settingsStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
+import { useEffectiveTheme, useThemeStore } from '@/app/stores/themeStore';
 import {
   FirstLaunchWizard,
   needsFirstLaunchWizard,
@@ -67,6 +80,9 @@ export default function Home() {
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   const knownCount = useWordStore((s) => s.known.size);
   const hydrated = useWordStore((s) => s.hydrated);
+  const effectiveTheme = useEffectiveTheme();
+  const toggleTheme = useThemeStore((s) => s.toggleMode);
+  const { token } = theme.useToken();
   const [wizardOpen, setWizardOpen] = useState(false);
   const prevMaterialRef = useRef<number | null>(null);
 
@@ -378,14 +394,37 @@ export default function Home() {
 
   const sidebar = useMemo(
     () => (
-      <Sider width={220} theme="light" style={{ borderRight: '1px solid rgba(0,0,0,0.06)' }}>
-        <div style={{ padding: 20 }}>
-          <Title level={4} style={{ margin: 0 }}>
-            WordBrain
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            v0.1.0
-          </Text>
+      <Sider
+        width={220}
+        theme={effectiveTheme}
+        style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
+      >
+        <div
+          style={{
+            padding: 20,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div>
+            <Title level={4} style={{ margin: 0 }}>
+              WordBrain
+            </Title>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              v0.1.0
+            </Text>
+          </div>
+          <Tooltip title={`Switch to ${effectiveTheme === 'dark' ? 'light' : 'dark'} theme`}>
+            <Button
+              type="text"
+              size="small"
+              aria-label="Toggle theme"
+              icon={effectiveTheme === 'dark' ? <BulbFilled /> : <BulbOutlined />}
+              onClick={toggleTheme}
+            />
+          </Tooltip>
         </div>
         <Space orientation="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
           <SidebarEntry
@@ -450,7 +489,7 @@ export default function Home() {
         </div>
       </Sider>
     ),
-    [view, knownCount, hydrated]
+    [view, knownCount, hydrated, effectiveTheme, toggleTheme, token]
   );
 
   return (
@@ -628,6 +667,7 @@ function SidebarEntry({
   active?: boolean;
   onClick?: () => void;
 }) {
+  const { token } = theme.useToken();
   return (
     <div
       onClick={disabled ? undefined : onClick}
@@ -637,8 +677,8 @@ function SidebarEntry({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        color: disabled ? 'rgba(0,0,0,0.35)' : active ? '#4f46e5' : 'inherit',
-        background: active ? 'rgba(79,70,229,0.08)' : 'transparent',
+        color: disabled ? token.colorTextDisabled : active ? token.colorPrimary : token.colorText,
+        background: active ? token.controlItemBgActive : 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >

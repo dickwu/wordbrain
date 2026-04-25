@@ -14,6 +14,7 @@ import {
   Space,
   Switch,
   Tag,
+  theme,
   Typography,
 } from 'antd';
 import {
@@ -43,6 +44,7 @@ const schemeOptions = [
 
 export function DictionarySettingsPanel() {
   const { message } = AntApp.useApp();
+  const { token } = theme.useToken();
   const [path, setPath] = useState('');
   const [cssPath, setCssPath] = useState('');
   const [busy, setBusy] = useState(false);
@@ -474,13 +476,22 @@ export function DictionarySettingsPanel() {
         {dictionaries.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No dictionaries imported" />
         ) : (
-          <div style={{ border: '1px solid #f0f0f0', borderRadius: 6, overflow: 'hidden' }}>
+          <div
+            style={{
+              border: `1px solid ${token.colorBorderSecondary}`,
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}
+          >
             {dictionaries.map((dict, index) => (
               <div
                 key={dict.id}
                 style={{
                   padding: '8px 12px',
-                  borderBottom: index === dictionaries.length - 1 ? 0 : '1px solid #f0f0f0',
+                  borderBottom:
+                    index === dictionaries.length - 1
+                      ? 0
+                      : `1px solid ${token.colorBorderSecondary}`,
                 }}
               >
                 <Space size={6} wrap>

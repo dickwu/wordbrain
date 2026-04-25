@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Divider, Drawer, Empty, Spin, Tag, Typography } from 'antd';
+import { Alert, Divider, Drawer, Empty, Spin, Tag, theme, Typography } from 'antd';
 import { clusterForWord, isTauri, type ClusterNeighbour, type ClusterPayload } from '@/app/lib/ipc';
 
 const { Text, Paragraph } = Typography;
@@ -155,14 +155,15 @@ function NeighbourBlock({
   onOpenMaterial?: (materialId: number) => void;
   onPickLemma?: (lemma: string) => void;
 }) {
+  const { token } = theme.useToken();
   return (
     <div
       style={{
         padding: 10,
         borderRadius: 6,
-        border: '1px solid rgba(0,0,0,0.06)',
+        border: `1px solid ${token.colorBorderSecondary}`,
         marginBottom: 8,
-        background: '#fafafa',
+        background: token.colorFillTertiary,
       }}
     >
       <div
@@ -194,7 +195,7 @@ function NeighbourBlock({
                 <Text
                   style={{
                     fontSize: 12,
-                    color: onOpenMaterial ? '#4f46e5' : 'rgba(0,0,0,0.65)',
+                    color: onOpenMaterial ? token.colorPrimary : token.colorText,
                     cursor: onOpenMaterial ? 'pointer' : 'default',
                   }}
                   onClick={() => onOpenMaterial?.(m.material_id)}

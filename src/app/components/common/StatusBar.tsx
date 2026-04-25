@@ -1,6 +1,6 @@
 'use client';
 
-import { Space, Typography } from 'antd';
+import { Space, theme, Typography } from 'antd';
 import { useWordStore } from '@/app/stores/wordStore';
 import { UpdateChecker } from '@/app/components/common/UpdateChecker';
 
@@ -13,6 +13,7 @@ const { Text } = Typography;
  */
 export function StatusBar() {
   const knownCount = useWordStore((s) => s.known.size);
+  const { token } = theme.useToken();
 
   return (
     <div
@@ -23,8 +24,8 @@ export function StatusBar() {
         justifyContent: 'space-between',
         gap: 12,
         padding: '4px 16px',
-        borderTop: '1px solid rgba(0,0,0,0.06)',
-        background: '#fafafa',
+        borderTop: `1px solid ${token.colorBorderSecondary}`,
+        background: token.colorBgLayout,
         fontSize: 12,
         minHeight: 32,
       }}

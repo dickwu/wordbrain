@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Empty, Space, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Space, Spin, Tag, theme, Typography } from 'antd';
 import { ReloadOutlined, ShareAltOutlined } from '@ant-design/icons';
 import {
   buildNetwork,
@@ -27,6 +27,7 @@ import {
   filterNodes,
   type NetworkFilterValue,
 } from './NetworkFilters';
+import { useEffectiveTheme } from '@/app/stores/themeStore';
 
 const { Title, Text } = Typography;
 
@@ -47,6 +48,8 @@ export function NetworkView({ refreshKey = 0, onOpenMaterial }: NetworkViewProps
   const [activeLemma, setActiveLemma] = useState<string | null>(null);
   const [layoutMs, setLayoutMs] = useState<number | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const { token } = theme.useToken();
+  const effectiveTheme = useEffectiveTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +122,7 @@ export function NetworkView({ refreshKey = 0, onOpenMaterial }: NetworkViewProps
       >
         <div>
           <Space size={10} align="baseline">
-            <ShareAltOutlined style={{ fontSize: 20, color: '#4f46e5' }} />
+            <ShareAltOutlined style={{ fontSize: 20, color: token.colorPrimary }} />
             <Title level={3} style={{ margin: 0 }}>
               Word network
             </Title>
@@ -158,9 +161,9 @@ export function NetworkView({ refreshKey = 0, onOpenMaterial }: NetworkViewProps
         style={{
           flex: 1,
           minHeight: 520,
-          border: '1px solid rgba(0,0,0,0.06)',
+          border: `1px solid ${token.colorBorderSecondary}`,
           borderRadius: 8,
-          background: '#fff',
+          background: token.colorBgContainer,
           overflow: 'hidden',
           position: 'relative',
         }}
@@ -179,6 +182,7 @@ export function NetworkView({ refreshKey = 0, onOpenMaterial }: NetworkViewProps
             selectedLemma={activeLemma}
             onPickLemma={setActiveLemma}
             onLayoutStop={(ms) => setLayoutMs(ms)}
+            effectiveTheme={effectiveTheme}
             style={{ width: '100%', height: '100%', minHeight: 520 }}
           />
         )}

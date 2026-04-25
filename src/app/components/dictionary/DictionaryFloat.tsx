@@ -12,6 +12,7 @@ import {
   Space,
   Spin,
   Tag,
+  theme,
   Typography,
 } from 'antd';
 import { BookOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
@@ -231,6 +232,7 @@ function DictionaryPage({
   elapsedMs: number;
   onEntryChange: (index: number) => void;
 }) {
+  const { token } = theme.useToken();
   return (
     <div
       style={{
@@ -243,7 +245,7 @@ function DictionaryPage({
       {entries.length > 1 && (
         <div
           style={{
-            border: '1px solid #f0f0f0',
+            border: `1px solid ${token.colorBorderSecondary}`,
             borderRadius: 6,
             flex: '0 1 220px',
             overflow: 'hidden',
@@ -257,10 +259,13 @@ function DictionaryPage({
               style={{
                 width: '100%',
                 border: 0,
-                borderBottom: index === entries.length - 1 ? 0 : '1px solid #f0f0f0',
+                borderBottom:
+                  index === entries.length - 1 ? 0 : `1px solid ${token.colorBorderSecondary}`,
                 padding: '10px 12px',
                 textAlign: 'left',
-                background: index === activeEntryIndex ? '#e6f4ff' : '#fff',
+                background:
+                  index === activeEntryIndex ? token.controlItemBgActive : token.colorBgContainer,
+                color: token.colorText,
                 cursor: 'pointer',
               }}
             >
@@ -304,9 +309,9 @@ function DictionaryPage({
             width: '100%',
             height: 'min(64vh, 640px)',
             minHeight: 500,
-            border: '1px solid #f0f0f0',
+            border: `1px solid ${token.colorBorderSecondary}`,
             borderRadius: 6,
-            background: '#fff',
+            background: token.colorBgContainer,
           }}
         />
       </div>

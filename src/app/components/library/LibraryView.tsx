@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { Alert, Button, Empty, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Button, Empty, Space, Spin, Tag, theme, Tooltip, Typography } from 'antd';
 import { BookOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import {
   isTauri,
@@ -27,6 +27,7 @@ export function LibraryView({ refreshKey = 0, onOpen }: LibraryViewProps) {
   const [recs, setRecs] = useState<RecommendedMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { token } = theme.useToken();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,9 +111,9 @@ export function LibraryView({ refreshKey = 0, onOpen }: LibraryViewProps) {
 
       <div
         style={{
-          border: '1px solid rgba(0,0,0,0.06)',
+          border: `1px solid ${token.colorBorderSecondary}`,
           borderRadius: 8,
-          background: '#fff',
+          background: token.colorBgContainer,
           overflow: 'hidden',
         }}
       >
@@ -147,6 +148,7 @@ function LibraryRow({
   material: MaterialSummary;
   onOpen?: (m: MaterialSummary) => void;
 }) {
+  const { token } = theme.useToken();
   const ratio = m.unique_tokens > 0 ? m.unknown_count / m.unique_tokens : 0;
   const ratioPct = (ratio * 100).toFixed(1);
   const est = estimateReadingMinutes(m.total_tokens);
@@ -162,7 +164,7 @@ function LibraryRow({
       }}
       style={{
         padding: '12px 16px',
-        borderBottom: '1px solid rgba(0,0,0,0.04)',
+        borderBottom: `1px solid ${token.colorSplit}`,
         display: 'grid',
         gridTemplateColumns: '1.8fr 0.6fr 0.9fr 1fr 0.8fr',
         gap: 12,
@@ -195,7 +197,7 @@ function LibraryRow({
       </div>
       <div style={{ textAlign: 'right' }}>
         <Space size={4}>
-          <ClockCircleOutlined style={{ fontSize: 12, color: 'rgba(0,0,0,0.45)' }} />
+          <ClockCircleOutlined style={{ fontSize: 12, color: token.colorTextSecondary }} />
           <Text type="secondary" style={{ fontSize: 12 }}>
             ~{est} min
           </Text>

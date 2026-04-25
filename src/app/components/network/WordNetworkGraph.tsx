@@ -14,6 +14,7 @@ import cytoscape, { Core, ElementDefinition } from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import CytoscapeComponent from 'react-cytoscapejs';
 import type { NetworkEdge, NetworkNode } from '@/app/lib/ipc';
+import type { EffectiveTheme } from '@/app/stores/themeStore';
 
 // Register the fcose layout exactly once. The dedupe guard stops us from
 // registering twice in React-Strict-Mode dev (dev-only double render).
@@ -38,6 +39,9 @@ export interface WordNetworkGraphProps {
   onPickLemma?: (lemma: string) => void;
   /** Captured to fulfil AC2 (<2 s to render). Fires on layout `stop`. */
   onLayoutStop?: (elapsedMs: number) => void;
+  /** Light/dark theme — drives label and edge colors so the graph stays
+   * readable on either canvas. Defaults to light. */
+  effectiveTheme?: EffectiveTheme;
   style?: React.CSSProperties;
 }
 
@@ -53,11 +57,19 @@ export function WordNetworkGraph({
   selectedLemma,
   onPickLemma,
   onLayoutStop,
+  effectiveTheme = 'light',
   style,
 }: WordNetworkGraphProps) {
   ensureRegistered();
   const cyRef = useRef<Core | null>(null);
   const [, setLayoutTick] = useState(0);
+
+  // Stylesheet depends on theme so labels and edges remain legible against the
+  // app's canvas. Recomputed (and reapplied below) only when the theme flips.
+  const stylesheet = useMemo<cytoscape.StylesheetJsonBlock[]>(
+    () => buildStylesheet(effectiveTheme),
+    [effectiveTheme]
+  );
 
   // Build cytoscape element list. `data.size` is pre-computed so the
   // stylesheet can map-by-data rather than re-evaluating an expression per
@@ -142,6 +154,14 @@ export function WordNetworkGraph({
     cy.$(`node[lemma = "${escapeSelector(selectedLemma)}"]`).addClass('selected');
   }, [selectedLemma, elements]);
 
+  // Reapply the stylesheet when the theme flips. `react-cytoscapejs` only
+  // applies its `stylesheet` prop on init, so we drive the update by hand.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.style().fromJson(stylesheet).update();
+  }, [stylesheet]);
+
   return (
     <CytoscapeComponent
       elements={elements}
@@ -150,7 +170,7 @@ export function WordNetworkGraph({
         cyRef.current = cy;
       }}
       wheelSensitivity={0.2}
-      stylesheet={STYLESHEET}
+      stylesheet={stylesheet}
     />
   );
 }
@@ -173,40 +193,48 @@ function escapeSelector(lemma: string): string {
   return lemma.replace(/["\\]/g, (c) => `\\${c}`);
 }
 
-// Cytoscape stylesheet. Kept as a plain constant so React doesn't rebuild it
-// on every render.
-const STYLESHEET: cytoscape.StylesheetJsonBlock[] = [
-  {
-    selector: 'node',
-    style: {
-      'background-color': 'data(color)',
-      label: 'data(lemma)',
-      color: '#111827',
-      'font-size': 10,
-      'text-valign': 'center',
-      'text-halign': 'center',
-      'text-outline-color': '#ffffff',
-      'text-outline-width': 1.2,
-      width: 'data(size)' as unknown as number,
-      height: 'data(size)' as unknown as number,
-      'border-width': 0,
+// Cytoscape stylesheet, parameterised by theme. Light keeps the original
+// indigo-on-white palette; dark inverts text and outlines so labels remain
+// readable against the app's slate canvas.
+function buildStylesheet(theme: EffectiveTheme): cytoscape.StylesheetJsonBlock[] {
+  const isDark = theme === 'dark';
+  const labelColor = isDark ? '#e2e8f0' : '#111827';
+  const outlineColor = isDark ? '#0f172a' : '#ffffff';
+  const edgeColor = isDark ? '#475569' : '#9ca3af';
+  const selectedRing = isDark ? '#e2e8f0' : '#111827';
+  return [
+    {
+      selector: 'node',
+      style: {
+        'background-color': 'data(color)',
+        label: 'data(lemma)',
+        color: labelColor,
+        'font-size': 10,
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-outline-color': outlineColor,
+        'text-outline-width': 1.2,
+        width: 'data(size)' as unknown as number,
+        height: 'data(size)' as unknown as number,
+        'border-width': 0,
+      },
     },
-  },
-  {
-    selector: 'node.selected',
-    style: {
-      'border-color': '#111827',
-      'border-width': 3,
-      'font-weight': 700,
+    {
+      selector: 'node.selected',
+      style: {
+        'border-color': selectedRing,
+        'border-width': 3,
+        'font-weight': 700,
+      },
     },
-  },
-  {
-    selector: 'edge',
-    style: {
-      'line-color': '#9ca3af',
-      'curve-style': 'haystack',
-      opacity: 'data(opacity)' as unknown as number,
-      width: 1.2,
+    {
+      selector: 'edge',
+      style: {
+        'line-color': edgeColor,
+        'curve-style': 'haystack',
+        opacity: 'data(opacity)' as unknown as number,
+        width: 1.2,
+      },
     },
-  },
-];
+  ];
+}

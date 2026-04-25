@@ -1,16 +1,25 @@
 'use client';
 
-import { App, Card, Space, Switch, Typography } from 'antd';
+import { App, Card, Segmented, Space, Switch, Typography } from 'antd';
 import { useSettingsStore } from '@/app/stores/settingsStore';
+import { useThemeStore, type ThemeMode } from '@/app/stores/themeStore';
 
 const { Title, Text } = Typography;
 
-/** General app preferences. Currently holds the auto-update toggle; grow as
- * Phase 9+ preferences land. */
+const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+  { label: 'System', value: 'system' },
+];
+
+/** General app preferences. Holds the appearance + auto-update toggles; grow
+ * as Phase 9+ preferences land. */
 export function GeneralSettingsPanel() {
   const { message } = App.useApp();
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
   const setAutoUpdate = useSettingsStore((s) => s.setAutoUpdate);
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
 
   return (
     <Card size="small">
@@ -18,9 +27,22 @@ export function GeneralSettingsPanel() {
         <Title level={5} style={{ margin: 0 }}>
           General
         </Title>
-        <Space
-          style={{ width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}
-        >
+
+        <Space style={{ width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Space orientation="vertical" size={2}>
+            <Text strong>Appearance</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Light, dark, or follow your operating system. The choice is remembered locally.
+            </Text>
+          </Space>
+          <Segmented
+            value={themeMode}
+            onChange={(v) => setThemeMode(v as ThemeMode)}
+            options={THEME_OPTIONS}
+          />
+        </Space>
+
+        <Space style={{ width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Space orientation="vertical" size={2}>
             <Text strong>Automatically check for updates</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>

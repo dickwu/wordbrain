@@ -14,7 +14,7 @@
  * a toggle re-lays out instantly without a round-trip.
  */
 
-import { Checkbox, InputNumber, Select, Space, Tag, Typography } from 'antd';
+import { Checkbox, InputNumber, Select, Space, Tag, theme, Typography } from 'antd';
 import type { MaterialSummary } from '@/app/lib/ipc';
 
 const { Text } = Typography;
@@ -50,6 +50,7 @@ export function NetworkFilters({
   visibleNodeCount: number;
   totalNodeCount: number;
 }) {
+  const { token } = theme.useToken();
   const toggleState = (s: 'known' | 'learning' | 'unknown', on: boolean) => {
     const next = new Set(value.states);
     if (on) next.add(s);
@@ -65,9 +66,9 @@ export function NetworkFilters({
         alignItems: 'center',
         flexWrap: 'wrap',
         padding: '10px 12px',
-        border: '1px solid rgba(0,0,0,0.06)',
+        border: `1px solid ${token.colorBorderSecondary}`,
         borderRadius: 8,
-        background: '#fff',
+        background: token.colorBgContainer,
       }}
     >
       <Space size={10} align="center">

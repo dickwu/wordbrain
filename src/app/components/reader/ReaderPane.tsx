@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useRef, useState } from 'react';
-import { App as AntApp } from 'antd';
+import { App as AntApp, theme } from 'antd';
 import {
   WordHighlightExtension,
   wordHighlightPluginKey,
@@ -50,6 +50,7 @@ export function ReaderPane({
   onDrillLemma,
 }: ReaderPaneProps) {
   const { message } = AntApp.useApp();
+  const { token } = theme.useToken();
   const [popover, setPopover] = useState<WordHighlightClickPayload | null>(null);
   const version = useWordStore((s) => s.version);
   const paintBudgetRef = useRef<number>(0);
@@ -104,9 +105,10 @@ export function ReaderPane({
         style={{
           minHeight: 320,
           padding: 20,
-          border: '1px solid rgba(0,0,0,0.12)',
+          border: `1px solid ${token.colorBorder}`,
           borderRadius: 8,
-          background: '#fff',
+          background: token.colorBgContainer,
+          color: token.colorText,
           lineHeight: 1.7,
           fontSize: 15,
         }}

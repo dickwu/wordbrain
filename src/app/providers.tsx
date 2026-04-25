@@ -4,20 +4,23 @@ import { useState, useEffect } from 'react';
 import { App, ConfigProvider, theme } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useThemeStore, initializeTheme } from '@/app/stores/themeStore';
+import { useEffectiveTheme, startSystemThemeListener } from '@/app/stores/themeStore';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const currentTheme = useThemeStore((s) => s.theme);
+  const effective = useEffectiveTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    initializeTheme();
+    const stop = startSystemThemeListener();
     setMounted(true);
+    return stop;
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', currentTheme === 'dark');
-  }, [currentTheme]);
+    document.documentElement.classList.toggle('dark', effective === 'dark');
+    // Hint native form controls + scrollbars to match the theme.
+    document.documentElement.style.colorScheme = effective;
+  }, [effective]);
 
   const [queryClient] = useState(
     () =>
@@ -39,7 +42,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ConfigProvider
         theme={{
-          algorithm: currentTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+          algorithm: effective === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
             colorPrimary: '#4f46e5',
           },
