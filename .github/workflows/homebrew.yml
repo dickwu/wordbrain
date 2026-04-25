@@ -22,8 +22,15 @@ name: Update Homebrew Cask
 # Tauri release changes the naming convention.
 
 on:
-  release:
-    types: [published]
+  # `release: published` is intentionally NOT used here. Releases created by
+  # release.yml use the default GITHUB_TOKEN, and GitHub blocks downstream
+  # workflows from firing on token-created events as an anti-recursion safety.
+  # `workflow_run` is special-cased and DOES fire regardless of token, so we
+  # piggyback on release.yml's completion instead.
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -34,11 +41,14 @@ on:
 jobs:
   update-cask:
     runs-on: ubuntu-latest
+    # workflow_run fires on every completion (success or fail). Skip the failed
+    # ones; manual dispatches always run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
     env:
-      RELEASE_TAG: ${{ github.event.release.tag_name }}
       DISPATCH_TAG: ${{ inputs.tag }}
+      WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
       TAP_OWNER: dickwu
       TAP_REPO: homebrew-tap
       APP_REPO: dickwu/wordbrain
@@ -46,7 +56,10 @@ jobs:
       - name: Resolve tag + version
         id: resolve
         run: |
-          TAG="${RELEASE_TAG:-$DISPATCH_TAG}"
+          # workflow_run reports the triggering ref via head_branch; for our
+          # release.yml that ref is the tag (e.g. "v0.1.7"). Manual dispatches
+          # supply the tag input directly.
+          TAG="${DISPATCH_TAG:-$WORKFLOW_RUN_HEAD_BRANCH}"
           case "$TAG" in
             v[0-9]*)
               ;;
