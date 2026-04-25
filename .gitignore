@@ -53,7 +53,13 @@ next-env.d.
 
 # AI tooling
 .agents/
-.claude/
+# Ignore everything under .claude/ except the project-scoped wordbrain-release
+# skill, which lives in version control so the release runbook travels with
+# the repo. Sessions, state, hooks, plugins, and unrelated skills stay ignored.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/wordbrain-release/
 .claude-flow/
 .codex/
 .swarm/
