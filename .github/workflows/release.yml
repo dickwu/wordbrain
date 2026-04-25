@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# Opt every JS-based action (checkout, upload-artifact, download-artifact, …)
+# onto Node 24 ahead of the June 2 2026 forced cutover. Removes the deprecation
+# warning and lets us drop the env var when v5+ majors land.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     strategy:
@@ -100,10 +106,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-release
-          shopt -s globstar nullglob
-          for f in src-tauri/target/**/release/bundle/**/*.{dmg,msi,deb,AppImage,app.tar.gz,app.tar.gz.sig,msi.zip,msi.zip.sig,AppImage.tar.gz,AppImage.tar.gz.sig}; do
-            cp -v "$f" dist-release/
-          done
+          # `find` instead of bash-4 `shopt -s globstar`: macOS GitHub runners
+          # ship Apple's bash 3.2 (frozen at GPLv3) which has no globstar.
+          find src-tauri/target -type f \
+            \( -name "*.dmg" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" \
+               -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
+               -o -name "*.msi.zip" -o -name "*.msi.zip.sig" \
+               -o -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" \) \
+            -path "*/release/bundle/*" -exec cp -v {} dist-release/ \;
           ls -la dist-release
 
       - uses: actions/upload-artifact@v4
