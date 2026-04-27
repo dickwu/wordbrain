@@ -19,8 +19,9 @@ the machine unless you export it yourself.
 brew install dickwu/tap/wordbrain
 ```
 
-This installs the latest universal `.dmg` into `/Applications/WordBrain.app`. Updates land
-automatically every time you run `brew upgrade wordbrain`.
+The cask lives in [`dickwu/homebrew-tap`](https://github.com/dickwu/homebrew-tap). It installs the
+latest universal `.dmg` into `/Applications/WordBrain.app`, and updates land automatically every
+time you run `brew upgrade wordbrain`.
 
 ### Direct download
 
