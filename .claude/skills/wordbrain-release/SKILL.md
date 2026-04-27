@@ -73,12 +73,18 @@ If anything is dirty, commit or stash. Then sanity-check locally:
 
 ```bash
 bun run test --run                # vitest
+bun run build                     # Next/Turbopack production build (catches missing deps — see trap #12)
 ( cd src-tauri && cargo check )   # base build
 ( cd src-tauri && cargo check --features dev-connector )  # dev path
 ```
 
 Fix anything red before tagging — CI will surface the same issues 10 minutes
 later, which wastes a build slot.
+
+`bun run build` is the most important step: vitest + cargo + lockfile checks
+all pass on incomplete `package.json` (a stray local `bun add` puts a package
+in `node_modules` but never records it). Only Turbopack's module resolver,
+running on a clean install, surfaces it — which is exactly what CI does.
 
 ## Running the release
 
@@ -317,7 +323,12 @@ on:
   workflow_run:
     workflows: [release]
     types: [completed]
-    branches: [main]
+    # `branches` filters workflow_run.head_branch. For a tag-triggered
+    # upstream, head_branch is the TAG (e.g. `v0.1.9`), not `main`. Using
+    # `branches: [main]` rejects every release.yml completion — see the
+    # v0.1.7-v0.1.9 era where homebrew.yml never auto-fired and every
+    # release needed a manual `gh workflow run homebrew.yml -f tag=...`.
+    branches: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -346,6 +357,46 @@ gh workflow run homebrew.yml --repo dickwu/wordbrain -f tag=v<x.y.z>
 
 This is also the right tool for a recovery from trap #4 in the Homebrew
 section below (404 on DMG download / wrong filename).
+
+### 12. Frontend production build fails on a dep that's in `node_modules` but not `package.json`
+
+CI fails on **all three platforms** at the `Build & bundle` step with a
+Turbopack module-not-found error like:
+
+```
+Error: Turbopack build failed with 1 errors:
+./src/app/components/foo.ts:1:1
+Module not found: Can't resolve 'some-package'
+```
+
+Root cause: a stray local `bun add` (or hoisted transitive) put the package
+in your `node_modules` but never made it into `package.json`. The local
+state is silently incomplete:
+
+- `bun install --frozen-lockfile` passes — the lockfile is self-consistent,
+  just doesn't contain the package.
+- `vitest run` passes — the missing dep lives outside the test graph.
+- Local `bun run build` may pass — `node_modules` already has it from the
+  stray install.
+- CI does a clean install from `package.json` only, so Turbopack's resolver
+  can't find the package and crashes.
+
+Fix:
+
+```bash
+bun add <package>           # or bun add -d for types-only
+git add package.json bun.lock
+git commit -m "fix(deps): declare <package>"
+```
+
+Then **re-cut the release at the next patch version** — never reuse a
+tagged version that already failed CI in this way. Per the recovery section
+below, force-pushing a tag to a new SHA is also an option but requires
+explicit destructive-ops authorisation.
+
+Prevention: the `bun run build` step in pre-flight catches this in ~20 s
+locally. If you only ran `bun run test` + `cargo check` and tagged anyway,
+this trap is what bit v0.1.8.
 
 ## Reporting status to the user
 

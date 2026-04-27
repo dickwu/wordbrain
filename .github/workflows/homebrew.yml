@@ -30,7 +30,11 @@ on:
   workflow_run:
     workflows: [release]
     types: [completed]
-    branches: [main]
+    # NOTE: `branches` filters workflow_run.head_branch. Our upstream
+    # release.yml runs on tag pushes, so head_branch is the tag (e.g.
+    # `v0.1.9`), not `main`. `branches: [main]` rejected every release —
+    # match the tag pattern instead.
+    branches: ['v*']
   workflow_dispatch:
     inputs:
       tag:
