@@ -13,8 +13,16 @@ export async function getAllKnownLemmas(): Promise<string[]> {
   return invoke<string[]>('get_all_known_lemmas');
 }
 
+export async function getAllKnownNames(): Promise<string[]> {
+  return invoke<string[]>('get_all_known_names');
+}
+
 export async function markKnownIpc(lemma: string, source = 'manual'): Promise<void> {
   return invoke<void>('mark_known', { lemma, source });
+}
+
+export async function markKnownNameIpc(name: string, source = 'manual'): Promise<void> {
+  return invoke<void>('mark_known_name', { name, source });
 }
 
 export async function unmarkKnownIpc(lemma: string): Promise<void> {
@@ -368,8 +376,32 @@ export interface StoryMaterialIpc {
   blanks: ClozeBlankIpc[];
 }
 
+export interface StoryHistoryItemIpc {
+  material_id: number;
+  title: string;
+  created_at: number;
+  read_at: number | null;
+  blank_count: number;
+}
+
 export async function generateStory(wordIds: number[]): Promise<StoryMaterialIpc> {
   return invoke<StoryMaterialIpc>('generate_story', { wordIds });
+}
+
+export async function listStoryHistory(): Promise<StoryHistoryItemIpc[]> {
+  return invoke<StoryHistoryItemIpc[]>('list_story_history');
+}
+
+export async function loadStory(materialId: number): Promise<StoryMaterialIpc | null> {
+  return invoke<StoryMaterialIpc | null>('load_story', { materialId });
+}
+
+export async function deleteStory(materialId: number): Promise<boolean> {
+  return invoke<boolean>('delete_story', { materialId });
+}
+
+export async function regenerateStory(materialId: number): Promise<StoryMaterialIpc> {
+  return invoke<StoryMaterialIpc>('regenerate_story', { materialId });
 }
 
 export async function generateMcqExplanation(

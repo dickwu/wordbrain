@@ -10,12 +10,11 @@ use crate::keys::KeyVault;
 use tauri::Manager;
 
 #[cfg(feature = "dev-connector")]
-const DEV_CONNECTOR_CAPABILITY: &str =
-    include_str!("../capabilities-dev/dev-connector.json");
+const DEV_CONNECTOR_CAPABILITY: &str = include_str!("../capabilities-dev/dev-connector.json");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -25,9 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init());
 
     #[cfg(feature = "dev-connector")]
-    {
-        builder = builder.plugin(tauri_plugin_connector::init());
-    }
+    let builder = builder.plugin(tauri_plugin_connector::init());
 
     builder
         .setup(|app| {
@@ -61,7 +58,9 @@ pub fn run() {
             commands::ping,
             commands::words::seed_known_from_frequency,
             commands::words::get_all_known_lemmas,
+            commands::words::get_all_known_names,
             commands::words::mark_known,
+            commands::words::mark_known_name,
             commands::words::unmark_known,
             commands::words::count_known,
             commands::words::list_words,
@@ -72,6 +71,8 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::dict::lookup_offline,
+            commands::dict::get_upload_server_config,
+            commands::dict::save_upload_server_config,
             commands::dict::get_dictionary_cloud_config,
             commands::dict::save_dictionary_cloud_config,
             commands::dict::import_custom_dictionary,
@@ -83,6 +84,9 @@ pub fn run() {
             commands::keys::save_api_key,
             commands::keys::has_api_key,
             commands::keys::list_configured_providers,
+            commands::keys::codex_auth_status,
+            commands::keys::import_openai_key_from_codex_auth,
+            commands::keys::list_codex_models_from_auth,
             commands::materials::save_material,
             commands::materials::list_materials,
             commands::materials::list_child_materials,
@@ -101,6 +105,10 @@ pub fn run() {
             commands::usage::register_word_use,
             commands::usage::recent_practice_words,
             commands::story::generate_story,
+            commands::story::list_story_history,
+            commands::story::load_story,
+            commands::story::delete_story,
+            commands::story::regenerate_story,
             commands::story::generate_mcq_explanation,
             commands::writing::submit_writing,
             ai::chain::ai_provider_status,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLookupCandidate, normalizeLookupQuery } from '../DictionaryFloat';
+import { isLookupCandidate, mergeLookupHistory, normalizeLookupQuery } from '../DictionaryFloat';
 
 describe('isLookupCandidate', () => {
   it('accepts a single English word', () => {
@@ -43,5 +43,25 @@ describe('normalizeLookupQuery', () => {
     expect(normalizeLookupQuery('')).toBe('');
     expect(normalizeLookupQuery(null)).toBe('');
     expect(normalizeLookupQuery('apple.')).toBe('');
+  });
+});
+
+describe('mergeLookupHistory', () => {
+  it('puts the newest valid word first and dedupes case-insensitively', () => {
+    expect(mergeLookupHistory(['apple', 'bravo'], ' Apple ')).toEqual(['apple', 'bravo']);
+    expect(mergeLookupHistory(['apple', 'bravo'], 'Curious')).toEqual([
+      'curious',
+      'apple',
+      'bravo',
+    ]);
+  });
+
+  it('ignores invalid entries and respects the limit', () => {
+    expect(mergeLookupHistory(['alpha', 'bravo'], 'two words', 2)).toEqual(['alpha', 'bravo']);
+    expect(mergeLookupHistory(['alpha', 'bravo', 'charlie'], 'delta', 3)).toEqual([
+      'delta',
+      'alpha',
+      'bravo',
+    ]);
   });
 });

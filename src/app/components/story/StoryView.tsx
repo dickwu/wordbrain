@@ -7,6 +7,8 @@ import {
   Button,
   Card,
   Empty,
+  Grid,
+  Popconfirm,
   Select,
   Space,
   Spin,
@@ -17,19 +19,30 @@ import {
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
+  CloseOutlined,
+  DeleteOutlined,
   FileTextOutlined,
+  HistoryOutlined,
+  ReloadOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import {
+  deleteStory,
   generateMcqExplanation,
   generateStory,
   isTauri,
+  listStoryHistory,
+  loadStory,
   recentPracticeWordsIpc,
+  regenerateStory,
   type RecentWordIpc,
+  type StoryHistoryItemIpc,
   type StoryMaterialIpc,
 } from '@/app/lib/ipc';
 import { useWordStore } from '@/app/stores/wordStore';
 import { registerWordUse } from '@/app/stores/usageStore';
+import { lemmatize } from '@/app/lib/tokenizer';
+import { WordLookupModal, normalizeLookupQuery } from '@/app/components/dictionary/WordLookupModal';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -42,7 +55,17 @@ interface BlankState {
   loadingExplanation: boolean;
 }
 
-type Phase = 'idle' | 'loading_seed' | 'generating' | 'ready' | 'error';
+type Phase = 'idle' | 'loading_seed' | 'ready' | 'error';
+
+interface StoryLookup {
+  lemma: string;
+  surface: string;
+  contextSentence: string;
+}
+
+interface StoryViewProps {
+  onDrillLemma?: (lemma: string) => void;
+}
 
 /**
  * Story Review surface. Pulls a handful of recent low-level words from
@@ -55,7 +78,7 @@ type Phase = 'idle' | 'loading_seed' | 'generating' | 'ready' | 'error';
  * The story is persisted server-side as a `materials` row with
  * `source_kind='ai_story'` so it re-appears in the Library.
  */
-export function StoryView() {
+export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
   const { message } = AntApp.useApp();
   const { token } = theme.useToken();
   const known = useWordStore((s) => s.known);
@@ -64,7 +87,26 @@ export function StoryView() {
   const [seed, setSeed] = useState<RecentWordIpc[]>([]);
   const [story, setStory] = useState<StoryMaterialIpc | null>(null);
   const [blanks, setBlanks] = useState<BlankState[]>([]);
+  const [history, setHistory] = useState<StoryHistoryItemIpc[]>([]);
+  const [selectedWordIds, setSelectedWordIds] = useState<Set<number>>(() => new Set());
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [generatingNew, setGeneratingNew] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [loadingStoryId, setLoadingStoryId] = useState<number | null>(null);
+  const [deletingStoryId, setDeletingStoryId] = useState<number | null>(null);
+  const [lookup, setLookup] = useState<StoryLookup | null>(null);
+
+  const applyStory = useCallback((result: StoryMaterialIpc) => {
+    setStory(result);
+    setBlanks(makeBlankState(result));
+    setPhase('ready');
+  }, []);
+
+  const refreshHistory = useCallback(async () => {
+    const rows = await listStoryHistory();
+    setHistory(rows);
+    return rows;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,13 +121,18 @@ export function StoryView() {
         return;
       }
       try {
-        const rows = await recentPracticeWordsIpc(14, 5);
+        const [rows, storyHistory] = await Promise.all([
+          recentPracticeWordsIpc(14, 5),
+          listStoryHistory(),
+        ]);
         if (cancelled) return;
         setSeed(rows);
+        setSelectedWordIds(new Set(rows.map((row) => row.id)));
+        setHistory(storyHistory);
         setPhase('idle');
       } catch (err) {
         if (!cancelled) {
-          setSeedError(`recent_practice_words failed: ${err}`);
+          setSeedError(`Story Review failed to load: ${err}`);
           setPhase('error');
         }
       }
@@ -100,27 +147,103 @@ export function StoryView() {
       message.warning('No recent words to weave into a story yet — read more first.');
       return;
     }
-    setPhase('generating');
+    if (selectedWordIds.size === 0) {
+      message.warning('Select at least one word for the story.');
+      return;
+    }
+    setGeneratingNew(true);
     try {
-      const wordIds = seed.map((s) => s.id);
+      const wordIds = seed.filter((s) => selectedWordIds.has(s.id)).map((s) => s.id);
       const result = await generateStory(wordIds);
-      setStory(result);
-      setBlanks(
-        result.blanks.map((b) => ({
-          index: b.index,
-          picked: null,
-          answered: false,
-          correct: false,
-          explanation: null,
-          loadingExplanation: false,
-        }))
-      );
-      setPhase('ready');
+      applyStory(result);
+      await refreshHistory();
     } catch (err) {
       message.error(`generate_story failed: ${err}`);
-      setPhase('idle');
+      if (!story) setPhase('idle');
+    } finally {
+      setGeneratingNew(false);
     }
-  }, [seed, message]);
+  }, [seed, selectedWordIds, message, story, applyStory, refreshHistory]);
+
+  const onToggleWord = useCallback((wordId: number) => {
+    setSelectedWordIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(wordId)) {
+        next.delete(wordId);
+      } else {
+        next.add(wordId);
+      }
+      return next;
+    });
+  }, []);
+
+  const onShowGeneratePage = useCallback(() => {
+    setSelectedWordIds(new Set(seed.map((s) => s.id)));
+    setPhase('idle');
+  }, [seed]);
+
+  const onLoadHistory = useCallback(
+    async (materialId: number) => {
+      setLoadingStoryId(materialId);
+      try {
+        const result = await loadStory(materialId);
+        if (result) {
+          applyStory(result);
+        } else {
+          message.warning('That story is no longer available.');
+          await refreshHistory();
+        }
+      } catch (err) {
+        message.error(`load_story failed: ${err}`);
+      } finally {
+        setLoadingStoryId(null);
+      }
+    },
+    [applyStory, message, refreshHistory]
+  );
+
+  const onDeleteHistory = useCallback(
+    async (materialId: number) => {
+      setDeletingStoryId(materialId);
+      try {
+        const deleted = await deleteStory(materialId);
+        if (!deleted) {
+          message.warning('That story is already gone.');
+        } else {
+          message.success('Story deleted.');
+        }
+        const rows = await refreshHistory();
+        if (story?.material_id === materialId) {
+          setStory(null);
+          setBlanks([]);
+          setPhase('idle');
+        }
+        if (!deleted && rows.length === 0) {
+          setPhase('idle');
+        }
+      } catch (err) {
+        message.error(`delete_story failed: ${err}`);
+      } finally {
+        setDeletingStoryId(null);
+      }
+    },
+    [message, refreshHistory, story]
+  );
+
+  const onRegenerate = useCallback(async () => {
+    if (!story) return;
+    setRegenerating(true);
+    try {
+      const result = await regenerateStory(story.material_id);
+      applyStory(result);
+      await refreshHistory();
+      message.success('Story regenerated and overwritten.');
+    } catch (err) {
+      message.error(`regenerate_story failed: ${err}`);
+    } finally {
+      setRegenerating(false);
+    }
+  }, [story, applyStory, refreshHistory, message]);
 
   /**
    * Commit one MCQ answer: fire +1 on the target word (regardless of
@@ -186,6 +309,18 @@ export function StoryView() {
     return splitOnPlaceholders(story.story_text);
   }, [story]);
 
+  const openSelectedStoryWord = useCallback(() => {
+    if (!story) return;
+    const surface = window.getSelection?.()?.toString().trim() ?? '';
+    const normalized = normalizeLookupQuery(surface);
+    if (!normalized) return;
+    setLookup({
+      lemma: lemmatize(normalized),
+      surface,
+      contextSentence: storyTextForContext(story, blanks),
+    });
+  }, [story, blanks]);
+
   if (phase === 'loading_seed') {
     return (
       <ViewShell>
@@ -202,41 +337,25 @@ export function StoryView() {
     );
   }
 
-  if (phase === 'idle' || phase === 'generating') {
+  if (phase === 'idle') {
     return (
       <ViewShell>
-        <Card>
-          {seed.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="No recent low-level words to weave into a story yet. Read or import more text to populate this list."
-            />
-          ) : (
-            <>
-              <Paragraph>
-                Generate a short story (~120-180 words) that practises{' '}
-                <strong>{seed.length}</strong> recent word{seed.length === 1 ? '' : 's'}.
-              </Paragraph>
-              <Space size={[6, 6]} wrap style={{ marginBottom: 16 }}>
-                {seed.map((w) => (
-                  <Tag key={w.id} color="blue">
-                    {w.lemma} <Text type="secondary">- lvl {w.level}</Text>
-                  </Tag>
-                ))}
-              </Space>
-              <div>
-                <Button
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  loading={phase === 'generating'}
-                  onClick={onGenerate}
-                >
-                  {phase === 'generating' ? 'Composing story...' : 'Generate story'}
-                </Button>
-              </div>
-            </>
-          )}
-        </Card>
+        <StoryLayout
+          history={history}
+          activeStoryId={story?.material_id ?? null}
+          loadingStoryId={loadingStoryId}
+          deletingStoryId={deletingStoryId}
+          onLoadHistory={onLoadHistory}
+          onDeleteHistory={onDeleteHistory}
+        >
+          <GenerateCard
+            seed={seed}
+            selectedWordIds={selectedWordIds}
+            generating={generatingNew}
+            onToggleWord={onToggleWord}
+            onGenerate={onGenerate}
+          />
+        </StoryLayout>
       </ViewShell>
     );
   }
@@ -244,86 +363,378 @@ export function StoryView() {
   if (!story) return null;
   return (
     <ViewShell>
-      <Card>
-        <Paragraph style={{ fontSize: 16, lineHeight: 1.8 }}>
-          {storySegments.map((seg, i) => {
-            if (seg.kind === 'text') {
-              return <span key={`t-${i}`}>{seg.value}</span>;
-            }
-            const blankIdx = seg.blankIdx!;
-            const blank = story.blanks[blankIdx];
-            if (!blank) return null;
-            const state = blanks[blankIdx];
-            const isAnswered = state?.answered ?? false;
-            return (
-              <Select
-                key={`b-${i}`}
-                size="middle"
-                style={{ minWidth: 140, margin: '0 4px' }}
-                placeholder="choose..."
-                disabled={isAnswered}
-                value={state?.picked ?? undefined}
-                onChange={(v) => void onAnswer(blankIdx, v)}
-                options={blank.options.map((opt) => ({ value: opt, label: opt }))}
-                status={isAnswered ? (state?.correct ? 'warning' : 'error') : undefined}
-                suffixIcon={
-                  isAnswered ? (
-                    state?.correct ? (
-                      <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-                    ) : (
-                      <CloseCircleOutlined style={{ color: token.colorError }} />
-                    )
-                  ) : undefined
-                }
-              />
-            );
-          })}
-        </Paragraph>
-
-        {blanks.some((b) => b.answered && !b.correct) && (
-          <div style={{ marginTop: 16 }}>
-            <Title level={5} style={{ marginBottom: 8 }}>
-              Explanations
-            </Title>
-            {blanks.map((b, i) => {
-              if (!b.answered || b.correct) return null;
-              const blank = story.blanks[i];
+      <StoryLayout
+        history={history}
+        activeStoryId={story.material_id}
+        loadingStoryId={loadingStoryId}
+        deletingStoryId={deletingStoryId}
+        onLoadHistory={onLoadHistory}
+        onDeleteHistory={onDeleteHistory}
+      >
+        <Card>
+          <Paragraph
+            className="wb-story-lookup-surface"
+            onDoubleClick={openSelectedStoryWord}
+            style={{ fontSize: 16, lineHeight: 1.8 }}
+          >
+            {storySegments.map((seg, i) => {
+              if (seg.kind === 'text') {
+                return <span key={`t-${i}`}>{seg.value}</span>;
+              }
+              const blankIdx = seg.blankIdx!;
+              const blank = story.blanks[blankIdx];
               if (!blank) return null;
+              const state = blanks[blankIdx];
+              const isAnswered = state?.answered ?? false;
               return (
-                <Alert
-                  key={`exp-${i}`}
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 8 }}
-                  message={
-                    <span>
-                      Blank #{i + 1} - correct answer was{' '}
-                      <Text strong>{blank.options[blank.correct_index]}</Text>
-                    </span>
-                  }
-                  description={
-                    b.loadingExplanation ? (
-                      <Spin size="small" />
-                    ) : (
-                      <Paragraph style={{ marginBottom: 0 }}>{b.explanation}</Paragraph>
-                    )
+                <Select
+                  key={`b-${i}`}
+                  size="middle"
+                  style={{ minWidth: 140, margin: '0 4px' }}
+                  placeholder="choose..."
+                  disabled={isAnswered}
+                  value={state?.picked ?? undefined}
+                  onChange={(v) => void onAnswer(blankIdx, v)}
+                  options={blank.options.map((opt) => ({ value: opt, label: opt }))}
+                  status={isAnswered ? (state?.correct ? 'warning' : 'error') : undefined}
+                  suffixIcon={
+                    isAnswered ? (
+                      state?.correct ? (
+                        <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+                      ) : (
+                        <CloseCircleOutlined style={{ color: token.colorError }} />
+                      )
+                    ) : undefined
                   }
                 />
               );
             })}
-          </div>
-        )}
+          </Paragraph>
 
-        <Space style={{ marginTop: 16 }}>
-          <Button onClick={onGenerate} icon={<ThunderboltOutlined />}>
-            Generate another story
-          </Button>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Story saved to your Library as an AI Story.
-          </Text>
-        </Space>
-      </Card>
+          {blanks.some((b) => b.answered && !b.correct) && (
+            <div style={{ marginTop: 16 }}>
+              <Title level={5} style={{ marginBottom: 8 }}>
+                Explanations
+              </Title>
+              {blanks.map((b, i) => {
+                if (!b.answered || b.correct) return null;
+                const blank = story.blanks[i];
+                if (!blank) return null;
+                return (
+                  <Alert
+                    key={`exp-${i}`}
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 8 }}
+                    message={
+                      <span>
+                        Blank #{i + 1} - correct answer was{' '}
+                        <Text strong>{blank.options[blank.correct_index]}</Text>
+                      </span>
+                    }
+                    description={
+                      b.loadingExplanation ? (
+                        <Spin size="small" />
+                      ) : (
+                        <Paragraph style={{ marginBottom: 0 }}>{b.explanation}</Paragraph>
+                      )
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          <Space style={{ marginTop: 16 }} wrap>
+            <Button
+              onClick={onShowGeneratePage}
+              icon={<ThunderboltOutlined />}
+              disabled={regenerating}
+            >
+              Generate new story
+            </Button>
+            <Button
+              onClick={onRegenerate}
+              icon={<ReloadOutlined />}
+              loading={regenerating}
+              disabled={generatingNew}
+            >
+              Regenerate and overwrite
+            </Button>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Story saved to your Library as an AI Story.
+            </Text>
+          </Space>
+
+          {lookup && (
+            <WordLookupModal
+              visible={true}
+              initialQuery={lookup.lemma}
+              surface={lookup.surface}
+              contextSentence={lookup.contextSentence}
+              autoSearch={true}
+              onClose={() => setLookup(null)}
+              onShowLinked={onDrillLemma}
+            />
+          )}
+        </Card>
+      </StoryLayout>
     </ViewShell>
+  );
+}
+
+function GenerateCard({
+  seed,
+  selectedWordIds,
+  generating,
+  onToggleWord,
+  onGenerate,
+}: {
+  seed: RecentWordIpc[];
+  selectedWordIds: Set<number>;
+  generating: boolean;
+  onToggleWord: (wordId: number) => void;
+  onGenerate: () => void;
+}) {
+  if (seed.length === 0) {
+    return (
+      <Card>
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="No recent low-level words to weave into a story yet. Read or import more text to populate this list."
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Paragraph>
+        Generate a short story (~120-180 words) that practises{' '}
+        <strong>{selectedWordIds.size}</strong> selected word{selectedWordIds.size === 1 ? '' : 's'}
+        .
+      </Paragraph>
+      <Space size={[6, 6]} wrap style={{ marginBottom: 16 }}>
+        {seed.map((w) => {
+          const selected = selectedWordIds.has(w.id);
+          return (
+            <Tag
+              key={w.id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected}
+              color={selected ? 'blue' : 'default'}
+              closable={selected}
+              closeIcon={<CloseOutlined aria-label={`Remove ${w.lemma}`} />}
+              onClose={(e) => {
+                e.preventDefault();
+                onToggleWord(w.id);
+              }}
+              onClick={() => onToggleWord(w.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onToggleWord(w.id);
+                }
+              }}
+              style={{
+                cursor: 'pointer',
+                opacity: selected ? 1 : 0.58,
+                textDecoration: selected ? 'none' : 'line-through',
+                userSelect: 'none',
+              }}
+            >
+              {w.lemma} <Text type="secondary">- lvl {w.level}</Text>
+            </Tag>
+          );
+        })}
+      </Space>
+      <div>
+        <Button
+          type="primary"
+          icon={<ThunderboltOutlined />}
+          loading={generating}
+          onClick={onGenerate}
+          disabled={selectedWordIds.size === 0}
+        >
+          {generating ? 'Composing story...' : 'Generate story'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function StoryLayout({
+  children,
+  history,
+  activeStoryId,
+  loadingStoryId,
+  deletingStoryId,
+  onLoadHistory,
+  onDeleteHistory,
+}: {
+  children: React.ReactNode;
+  history: StoryHistoryItemIpc[];
+  activeStoryId: number | null;
+  loadingStoryId: number | null;
+  deletingStoryId: number | null;
+  onLoadHistory: (materialId: number) => void;
+  onDeleteHistory: (materialId: number) => void;
+}) {
+  const screens = Grid.useBreakpoint();
+  const stacked = !screens.lg;
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: stacked ? '1fr' : 'minmax(0, 1fr) minmax(240px, 300px)',
+        gap: 12,
+        alignItems: 'start',
+      }}
+    >
+      <div>{children}</div>
+      <StoryHistoryPanel
+        history={history}
+        activeStoryId={activeStoryId}
+        loadingStoryId={loadingStoryId}
+        deletingStoryId={deletingStoryId}
+        onLoadHistory={onLoadHistory}
+        onDeleteHistory={onDeleteHistory}
+      />
+    </div>
+  );
+}
+
+function StoryHistoryPanel({
+  history,
+  activeStoryId,
+  loadingStoryId,
+  deletingStoryId,
+  onLoadHistory,
+  onDeleteHistory,
+}: {
+  history: StoryHistoryItemIpc[];
+  activeStoryId: number | null;
+  loadingStoryId: number | null;
+  deletingStoryId: number | null;
+  onLoadHistory: (materialId: number) => void;
+  onDeleteHistory: (materialId: number) => void;
+}) {
+  const { token } = theme.useToken();
+
+  return (
+    <aside
+      style={{
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: 8,
+        background: token.colorBgContainer,
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          padding: '10px 12px',
+          borderBottom: `1px solid ${token.colorSplit}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <Space size={6}>
+          <HistoryOutlined />
+          <Text strong>History</Text>
+        </Space>
+        <Tag>{history.length}</Tag>
+      </div>
+
+      {history.length === 0 ? (
+        <div style={{ padding: 12 }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No generated stories yet." />
+        </div>
+      ) : (
+        <div role="list" style={{ maxHeight: 520, overflow: 'auto' }}>
+          {history.map((item) => {
+            const active = item.material_id === activeStoryId;
+            const loading = item.material_id === loadingStoryId;
+            const deleting = item.material_id === deletingStoryId;
+            return (
+              <div
+                key={item.material_id}
+                role="listitem"
+                style={{
+                  borderBottom: `1px solid ${token.colorSplit}`,
+                  borderLeft: active ? `3px solid ${token.colorPrimary}` : '3px solid transparent',
+                  background: active ? token.colorFillSecondary : token.colorBgContainer,
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) 32px',
+                  alignItems: 'stretch',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onLoadHistory(item.material_id)}
+                  disabled={loading || deleting}
+                  style={{
+                    border: 0,
+                    background: 'transparent',
+                    color: token.colorText,
+                    cursor: loading || deleting ? 'wait' : 'pointer',
+                    padding: '10px 12px',
+                    textAlign: 'left',
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                    }}
+                  >
+                    <Text strong ellipsis style={{ maxWidth: 190 }}>
+                      {item.title}
+                    </Text>
+                    {loading ? <Spin size="small" /> : <Tag>{item.blank_count}</Tag>}
+                  </div>
+                  <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </Text>
+                </button>
+                <div
+                  style={{
+                    padding: '8px 8px 8px 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Popconfirm
+                    title="Delete this story?"
+                    description="It will be removed from Story history and Library."
+                    okText="Delete"
+                    cancelText="Cancel"
+                    okType="danger"
+                    onConfirm={() => onDeleteHistory(item.material_id)}
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      aria-label={`Delete ${item.title}`}
+                      loading={deleting}
+                    />
+                  </Popconfirm>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -376,4 +787,26 @@ function splitOnPlaceholders(
     out.push({ kind: 'text', value: text.slice(lastEnd) });
   }
   return out;
+}
+
+function makeBlankState(story: StoryMaterialIpc): BlankState[] {
+  return story.blanks.map((b) => ({
+    index: b.index,
+    picked: null,
+    answered: false,
+    correct: false,
+    explanation: null,
+    loadingExplanation: false,
+  }));
+}
+
+function storyTextForContext(story: StoryMaterialIpc, states: BlankState[]): string {
+  return story.story_text.replace(/\{\{(\d+)\}\}/g, (_match, rawIndex: string) => {
+    const idx = Math.max(0, parseInt(rawIndex, 10) - 1);
+    const blank = story.blanks[idx];
+    const state = states[idx];
+    if (state?.picked) return state.picked;
+    if (!blank) return '';
+    return blank.options[blank.correct_index] ?? '';
+  });
 }

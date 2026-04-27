@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { List, Button, Drawer, Progress, Space, Tag, Typography } from 'antd';
 import { BookOutlined, ReadOutlined } from '@ant-design/icons';
-import { isLemmaKnown, useWordStore } from '@/app/stores/wordStore';
+import { isKnownNameToken, isLemmaKnown, useWordStore } from '@/app/stores/wordStore';
 import { tokenize } from '@/app/lib/tokenizer';
 import type { EpubChapter, MaterialSummary } from '@/app/lib/ipc';
 
@@ -164,6 +164,7 @@ export function chapterUnknownRatio(raw: string): number {
   let unknown = 0;
   for (const t of toks) {
     if (!t.lemma) continue;
+    if (isKnownNameToken(t.lemma, t.surface)) continue;
     if (seen.has(t.lemma)) continue;
     seen.add(t.lemma);
     if (!isLemmaKnown(t.lemma)) unknown += 1;

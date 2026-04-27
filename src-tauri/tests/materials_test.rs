@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 use turso::Builder;
-use wordbrain_lib::db::{materials, schema, words};
+use wordbrain_lib::db::{materials, names, schema, words};
 
 async fn open(path: &PathBuf) -> turso::Connection {
     let db = Builder::new_local(path.to_str().expect("utf8 path"))
@@ -26,7 +26,11 @@ fn token(lemma: &str, first_position: i64, preview: &str) -> materials::TokenEdg
     }
 }
 
-fn mk_input(title: &str, raw: &str, tokens: Vec<materials::TokenEdge>) -> materials::SaveMaterialInput {
+fn mk_input(
+    title: &str,
+    raw: &str,
+    tokens: Vec<materials::TokenEdge>,
+) -> materials::SaveMaterialInput {
     let unique = tokens.len() as i64;
     materials::SaveMaterialInput {
         title: title.to_string(),
@@ -69,7 +73,9 @@ async fn save_material_persists_rows_and_edges() {
         ],
     );
 
-    let out = materials::save_material_on_conn(&conn, &input).await.unwrap();
+    let out = materials::save_material_on_conn(&conn, &input)
+        .await
+        .unwrap();
     assert!(out.material_id > 0);
     // 3 unknown lemmas (quick, fox, jumps) — "the" was pre-known.
     assert_eq!(out.unknown_count_at_import, 3);
@@ -91,6 +97,57 @@ async fn save_material_persists_rows_and_edges() {
         for_fox[0].sentence_preview.as_deref(),
         Some("the quick fox jumps.")
     );
+}
+
+#[tokio::test]
+async fn known_names_do_not_count_or_auto_graduate() {
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("wordbrain.db");
+    let conn = open(&db_path).await;
+    schema::apply(&conn).await.unwrap();
+    names::mark_known_name_on_conn(&conn, "mia", Some("manual"))
+        .await
+        .unwrap();
+
+    // Simulate an older/frontier client that still sends a name as a token.
+    // The DB live counts and exposure loop should filter it via known_names.
+    let input = mk_input(
+        "name doc",
+        "Mia found serendipity.",
+        vec![
+            token("mia", 0, "Mia found serendipity."),
+            token("serendipity", 10, "Mia found serendipity."),
+        ],
+    );
+
+    let out = materials::save_material_on_conn(&conn, &input)
+        .await
+        .unwrap();
+    assert_eq!(out.unknown_count_at_import, 1);
+
+    let list = materials::list_materials_on_conn(&conn).await.unwrap();
+    assert_eq!(list[0].unknown_count, 1);
+
+    let outcome = materials::record_material_close_on_conn(&conn, out.material_id, 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.graduated_to_learning,
+        vec!["serendipity".to_string()]
+    );
+
+    let mut rows = conn
+        .query(
+            "SELECT exposure_count, state FROM words WHERE lemma = 'mia'",
+            (),
+        )
+        .await
+        .unwrap();
+    let row = rows.next().await.unwrap().unwrap();
+    let exposure: i64 = row.get(0).unwrap();
+    let state: String = row.get(1).unwrap();
+    assert_eq!(exposure, 0);
+    assert_eq!(state, "unknown");
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +188,10 @@ async fn material_close_auto_graduates_at_threshold() {
     let outcome = materials::record_material_close_on_conn(&conn, saved.material_id, threshold)
         .await
         .unwrap();
-    assert_eq!(outcome.graduated_to_learning, vec!["serendipity".to_string()]);
+    assert_eq!(
+        outcome.graduated_to_learning,
+        vec!["serendipity".to_string()]
+    );
     assert!(outcome.graduated_to_known.is_empty());
 
     // 6th close: learning → known.
@@ -203,9 +263,7 @@ async fn recommend_next_with_50_docs_picks_target_ratio_doc() {
     // Pre-mark a global pool of "seed known" lemmas before any import so the
     // save path picks them up correctly. We reuse a single shared vocabulary
     // across docs so words behave like natural zipfian repetition.
-    let global_vocab: Vec<String> = (0..600)
-        .map(|i| format!("w{:04}", i))
-        .collect();
+    let global_vocab: Vec<String> = (0..600).map(|i| format!("w{:04}", i)).collect();
 
     // Mark 450 of the 600 as known upfront (75 %). That gives each doc a
     // ~25 % baseline unknown rate unless we stretch the doc's vocabulary.

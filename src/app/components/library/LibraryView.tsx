@@ -1,10 +1,28 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { Alert, Button, Empty, Space, Spin, Tag, theme, Tooltip, Typography } from 'antd';
-import { BookOutlined, ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import {
+  Alert,
+  App as AntApp,
+  Button,
+  Empty,
+  Popconfirm,
+  Space,
+  Spin,
+  Tag,
+  theme,
+  Tooltip,
+  Typography,
+} from 'antd';
+import {
+  BookOutlined,
+  ClockCircleOutlined,
+  DeleteOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
+import {
+  deleteStory,
   isTauri,
   listMaterials,
   recommendNext,
@@ -23,10 +41,12 @@ interface LibraryViewProps {
 }
 
 export function LibraryView({ refreshKey = 0, onOpen }: LibraryViewProps) {
+  const { message } = AntApp.useApp();
   const [materials, setMaterials] = useState<MaterialSummary[]>([]);
   const [recs, setRecs] = useState<RecommendedMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const { token } = theme.useToken();
 
   useEffect(() => {
@@ -61,6 +81,27 @@ export function LibraryView({ refreshKey = 0, onOpen }: LibraryViewProps) {
   const topPickRow = useMemo(
     () => (topPick ? materials.find((m) => m.id === topPick.id) : undefined),
     [materials, topPick]
+  );
+
+  const onDeleteAiStory = useCallback(
+    async (m: MaterialSummary) => {
+      setDeletingId(m.id);
+      try {
+        const deleted = await deleteStory(m.id);
+        if (!deleted) {
+          message.warning('That story is already gone.');
+        } else {
+          message.success('Story deleted.');
+        }
+        setMaterials((prev) => prev.filter((item) => item.id !== m.id));
+        setRecs((prev) => prev.filter((item) => item.id !== m.id));
+      } catch (err) {
+        message.error(`delete_story failed: ${err}`);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [message]
   );
 
   if (loading) {
@@ -120,7 +161,14 @@ export function LibraryView({ refreshKey = 0, onOpen }: LibraryViewProps) {
         <Virtuoso
           style={{ height: 480 }}
           data={materials}
-          itemContent={(_, m) => <LibraryRow material={m} onOpen={onOpen} />}
+          itemContent={(_, m) => (
+            <LibraryRow
+              material={m}
+              deleting={deletingId === m.id}
+              onOpen={onOpen}
+              onDeleteAiStory={onDeleteAiStory}
+            />
+          )}
           components={{ Footer: () => <div style={{ height: 12 }} /> }}
         />
       </div>
@@ -143,10 +191,14 @@ function LibraryHeader({ total }: { total: number }) {
 
 function LibraryRow({
   material: m,
+  deleting,
   onOpen,
+  onDeleteAiStory,
 }: {
   material: MaterialSummary;
+  deleting: boolean;
   onOpen?: (m: MaterialSummary) => void;
+  onDeleteAiStory?: (m: MaterialSummary) => void;
 }) {
   const { token } = theme.useToken();
   const ratio = m.unique_tokens > 0 ? m.unknown_count / m.unique_tokens : 0;
@@ -166,7 +218,7 @@ function LibraryRow({
         padding: '12px 16px',
         borderBottom: `1px solid ${token.colorSplit}`,
         display: 'grid',
-        gridTemplateColumns: '1.8fr 0.6fr 0.9fr 1fr 0.8fr',
+        gridTemplateColumns: '1.8fr 0.6fr 0.9fr 1fr 0.8fr 40px',
         gap: 12,
         alignItems: 'center',
         cursor: 'pointer',
@@ -202,6 +254,33 @@ function LibraryRow({
             ~{est} min
           </Text>
         </Space>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        {m.source_kind === 'ai_story' && (
+          <Popconfirm
+            title="Delete this story?"
+            description="It will be removed from Story history and Library."
+            okText="Delete"
+            cancelText="Cancel"
+            okType="danger"
+            onConfirm={(e) => {
+              e?.stopPropagation();
+              onDeleteAiStory?.(m);
+            }}
+            onCancel={(e) => e?.stopPropagation()}
+          >
+            <Button
+              type="text"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              aria-label={`Delete ${m.title}`}
+              loading={deleting}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </Popconfirm>
+        )}
       </div>
     </div>
   );

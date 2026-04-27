@@ -10,9 +10,7 @@ import {
   Divider,
   Empty,
   Input,
-  Select,
   Space,
-  Switch,
   Tag,
   theme,
   Typography,
@@ -25,22 +23,14 @@ import {
   ImportOutlined,
 } from '@ant-design/icons';
 import {
-  getDictionaryCloudConfig,
   importCustomDictionary,
   listCustomDictionaries,
-  saveDictionaryCloudConfig,
   uploadDictionaryResources,
   type CustomDictionary,
-  type DictionaryCloudConfig,
-  type DictionaryCloudConfigInput,
 } from '@/app/lib/dict';
 import { isTauri } from '@/app/lib/ipc';
 
 const { Paragraph, Text } = Typography;
-const schemeOptions = [
-  { label: 'https', value: 'https' },
-  { label: 'http', value: 'http' },
-];
 
 export function DictionarySettingsPanel() {
   const { message } = AntApp.useApp();
@@ -48,22 +38,8 @@ export function DictionarySettingsPanel() {
   const [path, setPath] = useState('');
   const [cssPath, setCssPath] = useState('');
   const [busy, setBusy] = useState(false);
-  const [savingCloud, setSavingCloud] = useState(false);
   const [uploadingResources, setUploadingResources] = useState(false);
   const [dictionaries, setDictionaries] = useState<CustomDictionary[]>([]);
-  const [cloudEnabled, setCloudEnabled] = useState(false);
-  const [cloudUploadEnabled, setCloudUploadEnabled] = useState(false);
-  const [endpointScheme, setEndpointScheme] = useState('https');
-  const [endpointHost, setEndpointHost] = useState('');
-  const [bucket, setBucket] = useState('');
-  const [publicDomainScheme, setPublicDomainScheme] = useState('https');
-  const [publicDomainHost, setPublicDomainHost] = useState('');
-  const [prefix, setPrefix] = useState('wordbrain/dictionaries');
-  const [r2ConfigText, setR2ConfigText] = useState('');
-  const [accessKeyId, setAccessKeyId] = useState('');
-  const [secretAccessKey, setSecretAccessKey] = useState('');
-  const [apiToken, setApiToken] = useState('');
-  const [credentialStatus, setCredentialStatus] = useState('');
 
   const refresh = async () => {
     if (!isTauri()) return;
@@ -76,104 +52,7 @@ export function DictionarySettingsPanel() {
 
   useEffect(() => {
     void refresh();
-    void loadCloudConfig();
   }, []);
-
-  const applyCloudConfig = (config: DictionaryCloudConfig) => {
-    setCloudEnabled(config.enabled);
-    setCloudUploadEnabled(config.uploadEnabled);
-    setEndpointScheme(config.endpointScheme || 'https');
-    setEndpointHost(config.endpointHost || '');
-    setBucket(config.bucket || '');
-    setPublicDomainScheme(config.publicDomainScheme || 'https');
-    setPublicDomainHost(config.publicDomainHost || '');
-    setPrefix(config.prefix || 'wordbrain/dictionaries');
-    setCredentialStatus(
-      [
-        config.hasAccessKeyId ? 'access key saved' : null,
-        config.hasSecretAccessKey ? 'secret saved' : null,
-        config.hasApiToken ? 'API token saved' : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    );
-  };
-
-  const loadCloudConfig = async () => {
-    if (!isTauri()) return;
-    try {
-      applyCloudConfig(await getDictionaryCloudConfig());
-    } catch (err) {
-      console.error('[wordbrain] load dictionary cloud config', err);
-    }
-  };
-
-  const saveCloudConfig = async (opts?: { silent?: boolean }) => {
-    if (!isTauri()) return null;
-    setSavingCloud(true);
-    try {
-      const config = await saveDictionaryCloudConfig({
-        enabled: cloudEnabled,
-        uploadEnabled: cloudEnabled && cloudUploadEnabled,
-        endpointScheme,
-        endpointHost,
-        bucket,
-        publicDomainScheme,
-        publicDomainHost,
-        prefix,
-        accessKeyId: accessKeyId.trim() || undefined,
-        secretAccessKey: secretAccessKey.trim() || undefined,
-        apiToken: apiToken.trim() || undefined,
-      });
-      applyCloudConfig(config);
-      setAccessKeyId('');
-      setSecretAccessKey('');
-      setApiToken('');
-      if (!opts?.silent) {
-        message.success('Dictionary resource settings saved');
-      }
-      return config;
-    } catch (err) {
-      if (!opts?.silent) {
-        message.error(`Save resource settings failed: ${err}`);
-      }
-      throw err;
-    } finally {
-      setSavingCloud(false);
-    }
-  };
-
-  const saveR2ConfigJson = async () => {
-    if (!isTauri()) {
-      message.info('Resource settings require the Tauri shell.');
-      return;
-    }
-    const raw = r2ConfigText.trim();
-    if (!raw) return;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      message.error('R2 config JSON is invalid');
-      return;
-    }
-
-    setSavingCloud(true);
-    try {
-      const config = await saveDictionaryCloudConfig(parsed as DictionaryCloudConfigInput);
-      applyCloudConfig(config);
-      setAccessKeyId('');
-      setSecretAccessKey('');
-      setApiToken('');
-      setR2ConfigText('');
-      message.success('R2 resource settings saved');
-    } catch (err) {
-      message.error(`Save R2 config failed: ${err}`);
-    } finally {
-      setSavingCloud(false);
-    }
-  };
 
   const uploadAllResources = async () => {
     if (!isTauri()) {
@@ -184,22 +63,6 @@ export function DictionarySettingsPanel() {
 
     setUploadingResources(true);
     try {
-      const raw = r2ConfigText.trim();
-      if (raw) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          message.error('R2 config JSON is invalid');
-          return;
-        }
-        const config = await saveDictionaryCloudConfig(parsed as DictionaryCloudConfigInput);
-        applyCloudConfig(config);
-        setR2ConfigText('');
-      } else if (cloudEnabled) {
-        await saveCloudConfig({ silent: true });
-      }
-
       const result = await uploadDictionaryResources({ force: true });
       await refresh();
       const totalResources = result.pageAssetCount + result.archiveResourceCount;
@@ -257,9 +120,6 @@ export function DictionarySettingsPanel() {
     if (!trimmed) return;
     setBusy(true);
     try {
-      if (cloudEnabled) {
-        await saveCloudConfig({ silent: true });
-      }
       const dict = await importCustomDictionary(trimmed, {
         cssPath: cssPath.trim() || null,
       });
@@ -332,144 +192,24 @@ export function DictionarySettingsPanel() {
 
       <Divider style={{ margin: '14px 0 10px' }} />
       <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-        <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
+        <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }} wrap>
           <Space size={8}>
             <CloudUploadOutlined />
-            <Text strong>Resource files</Text>
+            <Text strong>Resource uploads</Text>
           </Space>
-          <Switch
+          <Button
             size="small"
-            checked={cloudEnabled}
-            onChange={(checked) => {
-              setCloudEnabled(checked);
-              if (!checked) setCloudUploadEnabled(false);
-            }}
-          />
+            icon={<CloudUploadOutlined />}
+            loading={uploadingResources}
+            disabled={dictionaries.length === 0}
+            onClick={() => void uploadAllResources()}
+          >
+            Upload all
+          </Button>
         </Space>
-        <Input.TextArea
-          size="small"
-          placeholder="Paste R2 config JSON"
-          value={r2ConfigText}
-          onChange={(e) => setR2ConfigText(e.target.value)}
-          autoSize={{ minRows: 2, maxRows: 5 }}
-        />
-        <Button
-          size="small"
-          icon={<CloudUploadOutlined />}
-          loading={savingCloud}
-          disabled={!r2ConfigText.trim()}
-          onClick={() => void saveR2ConfigJson()}
-        >
-          Save R2 JSON
-        </Button>
-        {cloudEnabled && (
-          <>
-            <Space.Compact style={{ width: '100%' }}>
-              <Select
-                size="small"
-                value={publicDomainScheme}
-                options={schemeOptions}
-                onChange={setPublicDomainScheme}
-                style={{ width: 88 }}
-              />
-              <Input
-                size="small"
-                placeholder="Public file server domain"
-                value={publicDomainHost}
-                onChange={(e) => setPublicDomainHost(e.target.value)}
-              />
-            </Space.Compact>
-            <Input
-              size="small"
-              placeholder="Object prefix"
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-            />
-            <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Upload mirror
-              </Text>
-              <Switch size="small" checked={cloudUploadEnabled} onChange={setCloudUploadEnabled} />
-            </Space>
-            {cloudUploadEnabled && (
-              <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-                <Space.Compact style={{ width: '100%' }}>
-                  <Select
-                    size="small"
-                    value={endpointScheme}
-                    options={schemeOptions}
-                    onChange={setEndpointScheme}
-                    style={{ width: 88 }}
-                  />
-                  <Input
-                    size="small"
-                    placeholder="R2-compatible endpoint hostname"
-                    value={endpointHost}
-                    onChange={(e) => setEndpointHost(e.target.value)}
-                  />
-                </Space.Compact>
-                <Input
-                  size="small"
-                  placeholder="Bucket"
-                  value={bucket}
-                  onChange={(e) => setBucket(e.target.value)}
-                />
-                <Input.Password
-                  size="small"
-                  placeholder={
-                    credentialStatus.includes('access key')
-                      ? 'Access key ID saved'
-                      : 'Access key ID'
-                  }
-                  value={accessKeyId}
-                  onChange={(e) => setAccessKeyId(e.target.value)}
-                />
-                <Input.Password
-                  size="small"
-                  placeholder={
-                    credentialStatus.includes('secret saved')
-                      ? 'Secret access key saved'
-                      : 'Secret access key'
-                  }
-                  value={secretAccessKey}
-                  onChange={(e) => setSecretAccessKey(e.target.value)}
-                />
-                <Input.Password
-                  size="small"
-                  placeholder={
-                    credentialStatus.includes('API token')
-                      ? 'Cloudflare API token saved'
-                      : 'Cloudflare API token'
-                  }
-                  value={apiToken}
-                  onChange={(e) => setApiToken(e.target.value)}
-                />
-              </Space>
-            )}
-            <Space style={{ justifyContent: 'space-between', width: '100%' }} wrap>
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                {credentialStatus || 'No saved upload credentials'}
-              </Text>
-              <Button
-                size="small"
-                loading={savingCloud}
-                disabled={!publicDomainHost.trim()}
-                onClick={() => void saveCloudConfig()}
-              >
-                Save resources
-              </Button>
-              <Button
-                size="small"
-                icon={<CloudUploadOutlined />}
-                loading={uploadingResources}
-                disabled={dictionaries.length === 0 || savingCloud}
-                onClick={() => void uploadAllResources()}
-              >
-                Upload all
-              </Button>
-            </Space>
-          </>
-        )}
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Uses the shared Upload Server settings above for public URLs and R2-compatible uploads.
+        </Text>
       </Space>
 
       <div style={{ marginTop: 12 }}>

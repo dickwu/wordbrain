@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 use turso::Builder;
-use wordbrain_lib::db::{schema, words};
+use wordbrain_lib::db::{names, schema, words};
 
 async fn open(path: &PathBuf) -> turso::Connection {
     let db = Builder::new_local(path.to_str().expect("utf8 path"))
@@ -63,7 +63,10 @@ async fn mark_known_survives_connection_close_and_reopen() {
         let count = words::count_known_on_conn(&conn)
             .await
             .expect("count known after reopen");
-        assert_eq!(count, 2, "expected exactly the two marked lemmas to persist");
+        assert_eq!(
+            count, 2,
+            "expected exactly the two marked lemmas to persist"
+        );
     }
 }
 
@@ -78,7 +81,9 @@ async fn unmark_known_is_persistent_too() {
         words::mark_known_on_conn(&conn, "ephemeral", Some("manual"))
             .await
             .unwrap();
-        words::unmark_known_on_conn(&conn, "ephemeral").await.unwrap();
+        words::unmark_known_on_conn(&conn, "ephemeral")
+            .await
+            .unwrap();
     }
 
     {
@@ -123,5 +128,30 @@ async fn seed_then_restart_preserves_freq_seed() {
         assert_eq!(known.len(), 50, "seeded rows must survive restart");
         assert!(known.iter().any(|l| l == "word0001"));
         assert!(known.iter().any(|l| l == "word0050"));
+    }
+}
+
+#[tokio::test]
+async fn known_names_seed_and_manual_entries_survive_restart() {
+    let dir = TempDir::new().expect("tempdir");
+    let db_path = dir.path().join("wordbrain.db");
+
+    {
+        let conn = open(&db_path).await;
+        schema::apply(&conn).await.unwrap();
+        let seeded = names::get_all_known_names_on_conn(&conn).await.unwrap();
+        assert!(seeded.contains(&"mia".to_string()));
+
+        names::mark_known_name_on_conn(&conn, "Juniper's", Some("manual"))
+            .await
+            .unwrap();
+    }
+
+    {
+        let conn = open(&db_path).await;
+        schema::apply(&conn).await.unwrap();
+        let known_names = names::get_all_known_names_on_conn(&conn).await.unwrap();
+        assert!(known_names.contains(&"mia".to_string()));
+        assert!(known_names.contains(&"juniper".to_string()));
     }
 }

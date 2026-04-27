@@ -231,12 +231,7 @@ mod tests {
         conn
     }
 
-    async fn seed_word(
-        conn: &Connection,
-        lemma: &str,
-        state: &str,
-        freq_rank: Option<i64>,
-    ) -> i64 {
+    async fn seed_word(conn: &Connection, lemma: &str, state: &str, freq_rank: Option<i64>) -> i64 {
         let now = now_ms();
         conn.execute(
             "INSERT INTO words \

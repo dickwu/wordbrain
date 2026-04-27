@@ -569,10 +569,8 @@ mod tests {
             zip.write_all(opf.as_bytes()).unwrap();
 
             zip.start_file("cover.xhtml", deflate).unwrap();
-            zip.write_all(
-                b"<html><body><p>Cover.</p></body></html>",
-            )
-            .unwrap();
+            zip.write_all(b"<html><body><p>Cover.</p></body></html>")
+                .unwrap();
             for i in 1..=10 {
                 let body = format!(
                     r#"<html><body><h2>Real Chapter {i}</h2><p>The quick brown fox jumps over the lazy dog. This is a real chapter body with enough alphabetic characters to satisfy the minimum length filter baked into the parser.</p><p>Another paragraph extending the chapter so the tokenizer sees natural prose.</p></body></html>"#
@@ -595,7 +593,10 @@ mod tests {
     fn strip_srt_style_markup_independent_of_epub() {
         // Sanity on collapse_ws / normalise_archive_path so regressions show up.
         assert_eq!(collapse_ws("  a   b\n\tc  "), "a b c");
-        assert_eq!(normalise_archive_path("OEBPS/../chap1.xhtml#s"), "chap1.xhtml");
+        assert_eq!(
+            normalise_archive_path("OEBPS/../chap1.xhtml#s"),
+            "chap1.xhtml"
+        );
         assert_eq!(normalise_archive_path("./a/b"), "a/b");
     }
 }

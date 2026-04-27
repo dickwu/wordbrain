@@ -17,6 +17,8 @@ pub type ResourceResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceCloudSettings {
+    #[serde(default)]
+    pub name: String,
     pub enabled: bool,
     #[serde(default, alias = "upload_enabled")]
     pub upload_enabled: bool,
@@ -90,7 +92,8 @@ pub fn default_force_path_style() -> bool {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct ResourceCloudSettingsInput {
-    #[serde(alias = "account_id")]
+    name: Option<String>,
+    #[serde(alias = "account_id", alias = "accountId", alias = "id")]
     account_id: Option<String>,
     enabled: Option<bool>,
     #[serde(alias = "upload_enabled")]
@@ -118,11 +121,13 @@ struct ResourceCloudSettingsInput {
     region: Option<String>,
     #[serde(alias = "force_path_style")]
     force_path_style: Option<bool>,
-    #[serde(alias = "access_key_id")]
+    #[serde(alias = "key")]
+    key: Option<R2Token>,
+    #[serde(alias = "access_key_id", alias = "accessKeyId")]
     access_key_id: Option<String>,
-    #[serde(alias = "secret_access_key")]
+    #[serde(alias = "secret_access_key", alias = "secretAccessKey")]
     secret_access_key: Option<String>,
-    #[serde(alias = "api_token")]
+    #[serde(alias = "api_token", alias = "apiToken", alias = "token")]
     api_token: Option<String>,
 }
 
@@ -136,6 +141,7 @@ struct R2Export {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct R2Account {
     id: Option<String>,
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -147,8 +153,11 @@ struct R2TokenBundle {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct R2Token {
+    #[serde(alias = "apiToken", alias = "token")]
     api_token: Option<String>,
+    #[serde(alias = "accessKeyId")]
     access_key_id: Option<String>,
+    #[serde(alias = "secretAccessKey")]
     secret_access_key: Option<String>,
 }
 
@@ -162,6 +171,7 @@ struct R2Bucket {
 impl Default for ResourceCloudSettings {
     fn default() -> Self {
         Self {
+            name: String::new(),
             enabled: false,
             upload_enabled: false,
             endpoint_scheme: default_https(),
@@ -218,9 +228,21 @@ impl ResourceCloudSettingsInput {
         let endpoint = parse_domain_input(endpoint_host.as_deref());
         let public_domain = parse_domain_input(self.public_domain_host.as_deref());
         let bucket = trim_string(self.bucket);
-        let access_key_id = non_empty_string(self.access_key_id.as_deref());
-        let secret_access_key = non_empty_string(self.secret_access_key.as_deref());
-        let api_token = non_empty_string(self.api_token.as_deref());
+        let access_key_id = non_empty_string(self.access_key_id.as_deref()).or_else(|| {
+            self.key
+                .as_ref()
+                .and_then(|key| non_empty_string(key.access_key_id.as_deref()))
+        });
+        let secret_access_key = non_empty_string(self.secret_access_key.as_deref()).or_else(|| {
+            self.key
+                .as_ref()
+                .and_then(|key| non_empty_string(key.secret_access_key.as_deref()))
+        });
+        let api_token = non_empty_string(self.api_token.as_deref()).or_else(|| {
+            self.key
+                .as_ref()
+                .and_then(|key| non_empty_string(key.api_token.as_deref()))
+        });
         let upload_enabled = self.upload_enabled.unwrap_or_else(|| {
             !endpoint.host.trim().is_empty()
                 && !bucket.is_empty()
@@ -233,6 +255,7 @@ impl ResourceCloudSettingsInput {
 
         ResourceCloudConfigDraft {
             settings: ResourceCloudSettings {
+                name: trim_string(self.name),
                 enabled,
                 upload_enabled,
                 endpoint_scheme: normalize_scheme(
@@ -342,6 +365,10 @@ fn draft_from_r2_export(
         .account
         .as_ref()
         .and_then(|account| non_empty_string(account.id.as_deref()));
+    let name = export
+        .account
+        .as_ref()
+        .and_then(|account| non_empty_string(account.name.as_deref()));
     let token_bundle = export.tokens.first();
     let token = token_bundle.and_then(|bundle| bundle.token.as_ref());
     let bucket = token_bundle
@@ -378,6 +405,7 @@ fn draft_from_r2_export(
 
     Some(ResourceCloudConfigDraft {
         settings: ResourceCloudSettings {
+            name: name.unwrap_or_else(|| bucket_name.clone()),
             enabled,
             upload_enabled,
             endpoint_scheme: "https".to_string(),
@@ -667,5 +695,35 @@ mod tests {
         assert_eq!(draft.settings.public_domain_host, "word.example.test");
         assert_eq!(draft.access_key_id.as_deref(), Some("access"));
         assert_eq!(draft.secret_access_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn compact_r2_config_accepts_name_id_token_bucket_key() {
+        let value = serde_json::json!({
+            "name": "Main dictionary uploads",
+            "id": "abc123",
+            "token": "api",
+            "bucket": "word",
+            "key": {
+                "accessKeyId": "access",
+                "secretAccessKey": "secret"
+            },
+            "publicDomain": "https://word.example.test"
+        });
+
+        let draft = cloud_config_draft_from_value(value, "wordbrain/resources").unwrap();
+
+        assert_eq!(draft.settings.name, "Main dictionary uploads");
+        assert!(draft.settings.enabled);
+        assert!(draft.settings.upload_enabled);
+        assert_eq!(
+            draft.settings.endpoint_host,
+            "abc123.r2.cloudflarestorage.com"
+        );
+        assert_eq!(draft.settings.bucket, "word");
+        assert_eq!(draft.settings.public_domain_host, "word.example.test");
+        assert_eq!(draft.access_key_id.as_deref(), Some("access"));
+        assert_eq!(draft.secret_access_key.as_deref(), Some("secret"));
+        assert_eq!(draft.api_token.as_deref(), Some("api"));
     }
 }

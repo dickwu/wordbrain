@@ -65,11 +65,26 @@ pub async fn get_all_known_lemmas() -> Result<Vec<String>, String> {
         .map_err(|e| format!("get known lemmas: {e}"))
 }
 
+/// Every lower-case proper name in the reader allowlist.
+#[tauri::command]
+pub async fn get_all_known_names() -> Result<Vec<String>, String> {
+    db::names::get_all_known_names()
+        .await
+        .map_err(|e| format!("get known names: {e}"))
+}
+
 #[tauri::command]
 pub async fn mark_known(lemma: String, source: Option<String>) -> Result<(), String> {
     db::words::mark_known(&lemma, source.as_deref())
         .await
         .map_err(|e| format!("mark known: {e}"))
+}
+
+#[tauri::command]
+pub async fn mark_known_name(name: String, source: Option<String>) -> Result<(), String> {
+    db::names::mark_known_name(&name, source.as_deref())
+        .await
+        .map_err(|e| format!("mark known name: {e}"))
 }
 
 #[tauri::command]

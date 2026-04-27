@@ -191,7 +191,10 @@ mod tests {
         .await
         .expect("seed words row");
         let mut rows = conn
-            .query("SELECT id FROM words WHERE lemma = ?1", turso::params![lemma])
+            .query(
+                "SELECT id FROM words WHERE lemma = ?1",
+                turso::params![lemma],
+            )
             .await
             .unwrap();
         rows.next().await.unwrap().unwrap().get(0).unwrap()
@@ -276,7 +279,7 @@ mod tests {
         seed(&conn, "alpha", "learning", 2, now - 1_000).await; // higher level
         seed(&conn, "bravo", "learning", 0, now - 2_000).await; // older same-level
         seed(&conn, "charlie", "unknown", 0, now - 500).await; // newer same-level
-        // Out of window — must NOT appear.
+                                                               // Out of window — must NOT appear.
         seed(&conn, "delta", "learning", 0, now - 30 * 86_400_000).await;
         // 'known' state — must NOT appear regardless of recency.
         seed(&conn, "echo", "known", 0, now - 1_000).await;

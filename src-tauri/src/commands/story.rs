@@ -17,7 +17,9 @@ use serde::Deserialize;
 
 use crate::ai;
 use crate::db;
-use crate::db::story::{ClozeBlank, StoryInsertInput, StoryMaterial, SOURCE_KIND_AI_STORY};
+use crate::db::story::{
+    ClozeBlank, StoryHistoryItem, StoryInsertInput, StoryMaterial, SOURCE_KIND_AI_STORY,
+};
 
 /// Internal helper: parse the AI's JSON response into a typed shape.
 #[derive(Debug, Deserialize)]
@@ -37,6 +39,18 @@ struct AiStoryBlank {
     target_word: String,
     options: Vec<String>,
     correct_index: i64,
+}
+
+struct ComposedStory {
+    title: String,
+    story_text_placeholders: String,
+    raw_text: String,
+    tiptap_json: String,
+    mcq_payload: serde_json::Value,
+    word_ids: Vec<i64>,
+    total_tokens: i64,
+    unique_tokens: i64,
+    blanks: Vec<ClozeBlank>,
 }
 
 /// Count runs of ≥4 underscores in the AI's story body. Each run is one blank
@@ -102,6 +116,77 @@ fn placeholderize(story_text: &str) -> String {
 
 #[tauri::command]
 pub async fn generate_story(word_ids: Vec<i64>) -> Result<StoryMaterial, String> {
+    let composed = compose_story(&word_ids).await?;
+    let input = StoryInsertInput {
+        title: &composed.title,
+        story_text_placeholders: &composed.story_text_placeholders,
+        raw_text: &composed.raw_text,
+        tiptap_json: &composed.tiptap_json,
+        mcq_payload: &composed.mcq_payload,
+        word_ids: &composed.word_ids,
+        total_tokens: composed.total_tokens,
+        unique_tokens: composed.unique_tokens,
+        blanks: &composed.blanks,
+    };
+    debug_assert_eq!(SOURCE_KIND_AI_STORY, "ai_story");
+    db::story::insert_story(&input)
+        .await
+        .map_err(|e| format!("insert_story: {e}"))
+}
+
+#[tauri::command]
+pub async fn list_story_history() -> Result<Vec<StoryHistoryItem>, String> {
+    db::story::list_story_history()
+        .await
+        .map_err(|e| format!("list_story_history: {e}"))
+}
+
+#[tauri::command]
+pub async fn load_story(material_id: i64) -> Result<Option<StoryMaterial>, String> {
+    db::story::load_story(material_id)
+        .await
+        .map_err(|e| format!("load_story: {e}"))
+}
+
+#[tauri::command]
+pub async fn delete_story(material_id: i64) -> Result<bool, String> {
+    db::story::delete_story(material_id)
+        .await
+        .map_err(|e| format!("delete_story: {e}"))
+}
+
+#[tauri::command]
+pub async fn regenerate_story(material_id: i64) -> Result<StoryMaterial, String> {
+    let word_ids = db::story::story_word_ids(material_id)
+        .await
+        .map_err(|e| format!("story_word_ids: {e}"))?;
+    if word_ids.is_empty() {
+        return Err(format!(
+            "story material {material_id} has no target words to regenerate"
+        ));
+    }
+
+    // Compose first. If the AI result violates the story contract, the
+    // persisted history row is not touched.
+    let composed = compose_story(&word_ids).await?;
+    let input = StoryInsertInput {
+        title: &composed.title,
+        story_text_placeholders: &composed.story_text_placeholders,
+        raw_text: &composed.raw_text,
+        tiptap_json: &composed.tiptap_json,
+        mcq_payload: &composed.mcq_payload,
+        word_ids: &composed.word_ids,
+        total_tokens: composed.total_tokens,
+        unique_tokens: composed.unique_tokens,
+        blanks: &composed.blanks,
+    };
+    debug_assert_eq!(SOURCE_KIND_AI_STORY, "ai_story");
+    db::story::replace_story(material_id, &input)
+        .await
+        .map_err(|e| format!("replace_story: {e}"))
+}
+
+async fn compose_story(word_ids: &[i64]) -> Result<ComposedStory, String> {
     if word_ids.is_empty() {
         return Err("word_ids must not be empty".to_string());
     }
@@ -212,21 +297,17 @@ pub async fn generate_story(word_ids: Vec<i64>) -> Result<StoryMaterial, String>
         lemmas[0],
         lemmas.len().saturating_sub(1)
     );
-    let input = StoryInsertInput {
-        title: &title,
-        story_text_placeholders: &placeholder_text,
-        raw_text: &resp.story_text,
-        tiptap_json: &tiptap,
-        mcq_payload: &mcq_payload,
-        word_ids: &covered_word_ids,
+    Ok(ComposedStory {
+        title,
+        story_text_placeholders: placeholder_text,
+        raw_text: resp.story_text,
+        tiptap_json: tiptap,
+        mcq_payload,
+        word_ids: covered_word_ids,
         total_tokens,
         unique_tokens,
-        blanks: &blanks,
-    };
-    debug_assert_eq!(SOURCE_KIND_AI_STORY, "ai_story");
-    db::story::insert_story(&input)
-        .await
-        .map_err(|e| format!("insert_story: {e}"))
+        blanks,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,7 +332,11 @@ pub async fn generate_mcq_explanation(
 
     // Cap the known list so the prompt stays under ~6 KB. Spec default is 800.
     const KNOWN_CAP: usize = 800;
-    let mut bounded: Vec<&str> = known_lemmas.iter().take(KNOWN_CAP).map(|s| s.as_str()).collect();
+    let mut bounded: Vec<&str> = known_lemmas
+        .iter()
+        .take(KNOWN_CAP)
+        .map(|s| s.as_str())
+        .collect();
     bounded.sort_unstable();
     bounded.dedup();
 
@@ -268,8 +353,8 @@ pub async fn generate_mcq_explanation(
     let parsed = outcome
         .parsed
         .ok_or_else(|| "explanation AI returned no JSON object".to_string())?;
-    let resp: AiExplanationResponse = serde_json::from_value(parsed)
-        .map_err(|e| format!("explanation parse: {e}"))?;
+    let resp: AiExplanationResponse =
+        serde_json::from_value(parsed).map_err(|e| format!("explanation parse: {e}"))?;
     Ok(resp.explanation)
 }
 

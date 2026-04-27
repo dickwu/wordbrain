@@ -1,56 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Form, Input, Button, Space, Tag, Typography, Alert, App as AntApp } from 'antd';
-import { KeyOutlined, DeleteOutlined, CheckCircleTwoTone } from '@ant-design/icons';
-import { saveApiKey, hasApiKey, listConfiguredProviders } from '@/app/lib/dict';
+import { Card, Typography, Alert, App as AntApp } from 'antd';
+import { KeyOutlined } from '@ant-design/icons';
+import { saveApiKey, listConfiguredProviders } from '@/app/lib/dict';
 import { isTauri } from '@/app/lib/ipc';
+import { ProviderKeyRows, type ProviderKeyDef } from './ProviderKeyRows';
 
-const { Paragraph, Text } = Typography;
+const { Paragraph } = Typography;
 
-interface ProviderDef {
-  id: string;
-  label: string;
-  hint: string;
-  placeholder: string;
-  secure?: boolean;
-}
-
-const PROVIDERS: ProviderDef[] = [
+const ONLINE_DICTIONARY_PROVIDERS: ProviderKeyDef[] = [
   {
     id: 'youdao',
     label: '有道 (Youdao)',
     hint: 'Format: APP_KEY:APP_SECRET (free tier at ai.youdao.com)',
     placeholder: 'xxxxxxxx:xxxxxxxxxxxxxxxxxxxxxxxx',
-    secure: true,
   },
   {
     id: 'deepl',
     label: 'DeepL',
     hint: 'Auth key from deepl.com. Free-tier keys end in ":fx".',
     placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx',
-    secure: true,
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    hint: 'Your own API key (sk-…) used for contextual AI gloss.',
-    placeholder: 'sk-…',
-    secure: true,
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic',
-    hint: 'API key (sk-ant-…) for Claude-powered gloss.',
-    placeholder: 'sk-ant-…',
-    secure: true,
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama (local)',
-    hint: 'Runs on 127.0.0.1:11434 — no key needed. Toggle to mark as "ready".',
-    placeholder: 'local: ok',
-    secure: false,
   },
 ];
 
@@ -103,14 +73,13 @@ export function ApiKeysPanel() {
     <Card
       title={
         <span>
-          <KeyOutlined /> BYOK — API Keys
+          <KeyOutlined /> Online Dictionary Keys
         </span>
       }
       size="small"
     >
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Keys are encrypted at rest via tauri-plugin-stronghold and never leave the Rust backend
-        after saving. Clear the slot by saving an empty value.
+        Youdao and DeepL keys are encrypted at rest and only read by the Rust backend.
       </Paragraph>
       {!isTauri() && (
         <Alert
@@ -120,90 +89,13 @@ export function ApiKeysPanel() {
           style={{ marginBottom: 12 }}
         />
       )}
-      <Space orientation="vertical" style={{ width: '100%' }} size={12}>
-        {PROVIDERS.map((p) => (
-          <ProviderRow
-            key={p.id}
-            provider={p}
-            configured={configured.has(p.id)}
-            busy={busy === p.id}
-            onSave={(value) => onSave(p.id, value)}
-            onClear={() => onClear(p.id)}
-          />
-        ))}
-      </Space>
+      <ProviderKeyRows
+        providers={ONLINE_DICTIONARY_PROVIDERS}
+        configured={configured}
+        busyProvider={busy}
+        onSave={onSave}
+        onClear={onClear}
+      />
     </Card>
-  );
-}
-
-function ProviderRow({
-  provider,
-  configured,
-  busy,
-  onSave,
-  onClear,
-}: {
-  provider: ProviderDef;
-  configured: boolean;
-  busy: boolean;
-  onSave: (value: string) => Promise<void>;
-  onClear: () => Promise<void>;
-}) {
-  const [value, setValue] = useState('');
-  const [touched, setTouched] = useState(false);
-
-  useEffect(() => {
-    // Clear the input whenever it successfully saves.
-    if (!touched && configured) setValue('');
-  }, [configured, touched]);
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-        <Text strong>{provider.label}</Text>
-        <span style={{ flex: 1 }} />
-        {configured && (
-          <Tag icon={<CheckCircleTwoTone twoToneColor="#52c41a" />} color="success">
-            configured
-          </Tag>
-        )}
-      </div>
-      <Paragraph type="secondary" style={{ fontSize: 11, marginBottom: 4 }}>
-        {provider.hint}
-      </Paragraph>
-      <Space.Compact style={{ width: '100%' }}>
-        <Input.Password
-          size="small"
-          placeholder={provider.placeholder}
-          value={value}
-          onChange={(e) => {
-            setTouched(true);
-            setValue(e.target.value);
-          }}
-          autoComplete="off"
-        />
-        <Button
-          type="primary"
-          size="small"
-          loading={busy}
-          disabled={!value}
-          onClick={async () => {
-            await onSave(value);
-            setValue('');
-            setTouched(false);
-          }}
-        >
-          Save
-        </Button>
-        <Button
-          size="small"
-          icon={<DeleteOutlined />}
-          disabled={!configured || busy}
-          onClick={onClear}
-        >
-          Clear
-        </Button>
-      </Space.Compact>
-    </div>
   );
 }

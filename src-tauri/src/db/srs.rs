@@ -107,9 +107,9 @@ pub async fn add_to_srs_on_conn(
         )
         .await?;
 
-        let word_id = lookup_word_id(conn, lemma).await?.ok_or_else(|| {
-            format!("add_to_srs: could not resolve word id for {lemma}")
-        })?;
+        let word_id = lookup_word_id(conn, lemma)
+            .await?
+            .ok_or_else(|| format!("add_to_srs: could not resolve word id for {lemma}"))?;
 
         // Is this word already in SRS?
         let mut rows = conn
@@ -264,9 +264,9 @@ pub async fn apply_rating_on_conn(
 
     conn.execute("BEGIN IMMEDIATE;", ()).await?;
     let tx: DbResult<ApplyRatingOutcome> = async {
-        let word_id = lookup_word_id(conn, lemma).await?.ok_or_else(|| {
-            format!("apply_rating: word `{lemma}` is not in the words table")
-        })?;
+        let word_id = lookup_word_id(conn, lemma)
+            .await?
+            .ok_or_else(|| format!("apply_rating: word `{lemma}` is not in the words table"))?;
 
         // Read the pre-update schedule row so we can log prev_stability and
         // decide reps/lapses deltas based on the rating.
@@ -385,10 +385,7 @@ pub async fn apply_rating(
 // Helpers
 // ---------------------------------------------------------------------------
 
-async fn read_schedule_snapshot(
-    conn: &Connection,
-    word_id: i64,
-) -> DbResult<(f64, i64, i64)> {
+async fn read_schedule_snapshot(conn: &Connection, word_id: i64) -> DbResult<(f64, i64, i64)> {
     let mut rows = conn
         .query(
             "SELECT stability, reps, lapses FROM srs_schedule WHERE word_id = ?1",

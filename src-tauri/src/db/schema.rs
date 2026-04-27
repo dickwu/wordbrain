@@ -5,7 +5,7 @@
 
 use turso::Connection;
 
-use super::DbResult;
+use super::{names, DbResult};
 
 /// Creates every table + index listed in §4 of the plan. Idempotent.
 pub async fn apply(conn: &Connection) -> DbResult<()> {
@@ -32,6 +32,23 @@ pub async fn apply(conn: &Connection) -> DbResult<()> {
         ",
     )
     .await?;
+
+    // 4.1c Proper-name allowlist. These rows are intentionally separate from
+    // `words`: names should be ignored by reader highlighting without becoming
+    // vocabulary, graph nodes, or SRS candidates.
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS known_names (
+          name       TEXT PRIMARY KEY,
+          source     TEXT    NOT NULL DEFAULT 'builtin',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_known_names_source ON known_names(source);
+        ",
+    )
+    .await?;
+    names::seed_builtin_names_on_conn(conn).await?;
 
     // 4.1b Learning-loop telemetry. Older DBs predate `usage_count`, so we
     // ALTER it in when missing. The composite index powers the recent-words

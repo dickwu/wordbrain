@@ -13,20 +13,10 @@ import {
   type OnlineLookupResult,
   type OnlineProvider,
 } from '@/app/lib/dict';
+import { AI_PROVIDER_OPTIONS, MODEL_OPTIONS } from '@/app/lib/ai-models';
+import { useSettingsStore } from '@/app/stores/settingsStore';
 
 const { Text, Paragraph } = Typography;
-
-export const DEFAULT_AI_MODEL: Record<AiProvider, string> = {
-  openai: 'gpt-4o-mini',
-  anthropic: 'claude-sonnet-4-6',
-  ollama: 'qwen2.5:3b',
-};
-
-export const MODEL_OPTIONS: Record<AiProvider, string[]> = {
-  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
-  anthropic: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7'],
-  ollama: ['qwen2.5:3b', 'llama3.1:8b', 'gemma2:2b'],
-};
 
 export function CacheBadge({
   label,
@@ -77,7 +67,7 @@ export function OfflineTab({ lemma }: { lemma: string }) {
   }, [lemma]);
 
   if (loading) return <Spin size="small" />;
-  if (err) return <Alert type="error" message={err} showIcon />;
+  if (err) return <Alert type="error" title={err} showIcon />;
   if (!entry)
     return (
       <Paragraph type="secondary" style={{ fontSize: 12, margin: 0 }}>
@@ -146,7 +136,7 @@ export function OnlineTab({ lemma }: { lemma: string }) {
         />
       </div>
       {loading && <Spin size="small" />}
-      {err && <Alert type="warning" message={err} showIcon style={{ marginTop: 4 }} />}
+      {err && <Alert type="warning" title={err} showIcon style={{ marginTop: 4 }} />}
       {result && !loading && (
         <div>
           <div style={{ marginBottom: 4 }}>
@@ -172,8 +162,10 @@ export function OnlineTab({ lemma }: { lemma: string }) {
 }
 
 export function AiTab({ lemma, contextSentence }: { lemma: string; contextSentence: string }) {
-  const [provider, setProvider] = useState<AiProvider>('openai');
-  const [model, setModel] = useState<string>(DEFAULT_AI_MODEL.openai);
+  const provider = useSettingsStore((s) => s.aiProvider);
+  const model = useSettingsStore((s) => s.aiModels[s.aiProvider]);
+  const setAiProvider = useSettingsStore((s) => s.setAiProvider);
+  const setAiModel = useSettingsStore((s) => s.setAiModel);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiLookupResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -199,20 +191,15 @@ export function AiTab({ lemma, contextSentence }: { lemma: string; contextSenten
           value={provider}
           style={{ width: 100 }}
           onChange={(v) => {
-            setProvider(v);
-            setModel(DEFAULT_AI_MODEL[v]);
+            void setAiProvider(v as AiProvider);
           }}
-          options={[
-            { value: 'openai', label: 'OpenAI' },
-            { value: 'anthropic', label: 'Anthropic' },
-            { value: 'ollama', label: 'Ollama' },
-          ]}
+          options={AI_PROVIDER_OPTIONS}
         />
         <Select
           size="small"
           value={model}
           style={{ minWidth: 140 }}
-          onChange={(v) => setModel(v)}
+          onChange={(v) => void setAiModel(provider, v)}
           options={(MODEL_OPTIONS[provider] ?? []).map((m) => ({ value: m, label: m }))}
         />
         <Button
@@ -228,7 +215,7 @@ export function AiTab({ lemma, contextSentence }: { lemma: string; contextSenten
       <Paragraph type="secondary" style={{ fontSize: 11, marginBottom: 6 }}>
         Uses this sentence as context (sha1-hashed for cache key).
       </Paragraph>
-      {err && <Alert type="warning" message={err} showIcon style={{ marginTop: 4 }} />}
+      {err && <Alert type="warning" title={err} showIcon style={{ marginTop: 4 }} />}
       {result && !loading && (
         <div>
           <div style={{ marginBottom: 4 }}>

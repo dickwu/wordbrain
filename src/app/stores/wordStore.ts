@@ -1,17 +1,28 @@
 import { create } from 'zustand';
 import { PHASE1_SEED } from '@/app/lib/seed/phase1-seed';
-import { isTauri, markKnownIpc, unmarkKnownIpc, getAllKnownLemmas } from '@/app/lib/ipc';
+import {
+  isTauri,
+  markKnownIpc,
+  markKnownNameIpc,
+  unmarkKnownIpc,
+  getAllKnownLemmas,
+  getAllKnownNames,
+} from '@/app/lib/ipc';
+import { BUILTIN_KNOWN_NAMES, looksLikeNameToken, normalizeNameKey } from '@/app/lib/names';
 
 interface WordState {
   known: Set<string>;
+  knownNames: Set<string>;
   /** True once the DB-backed set has replaced the Phase-1 fallback seed. */
   hydrated: boolean;
   markKnown: (lemma: string) => void;
+  markKnownName: (name: string) => void;
   unmark: (lemma: string) => void;
   bulkUnmark: (lemmas: string[]) => void;
   setState: (lemma: string, state: 'known' | 'learning' | 'unknown') => void;
   isKnown: (lemma: string) => boolean;
-  hydrateFrom: (lemmas: Iterable<string>) => void;
+  isKnownName: (lemma: string, surface?: string) => boolean;
+  hydrateFrom: (lemmas: Iterable<string>, names?: Iterable<string>) => void;
   /** Monotonic counter; bump on every mutation so Tiptap can rebuild decorations. */
   version: number;
 }
@@ -21,8 +32,12 @@ interface WordState {
 const initialSeed = new Set<string>();
 for (const w of PHASE1_SEED) initialSeed.add(w.toLowerCase());
 
+const initialNameSeed = new Set<string>();
+for (const n of BUILTIN_KNOWN_NAMES) initialNameSeed.add(n);
+
 export const useWordStore = create<WordState>((set, get) => ({
   known: initialSeed,
+  knownNames: initialNameSeed,
   hydrated: false,
   version: 0,
   markKnown: (lemma) => {
@@ -37,6 +52,21 @@ export const useWordStore = create<WordState>((set, get) => ({
     if (isTauri()) {
       void markKnownIpc(key).catch((err) => {
         console.error('[wordbrain] mark_known IPC failed', err);
+      });
+    }
+  },
+  markKnownName: (name) => {
+    const key = normalizeNameKey(name);
+    if (!key) return;
+    set((s) => {
+      if (s.knownNames.has(key)) return s;
+      const next = new Set(s.knownNames);
+      next.add(key);
+      return { knownNames: next, version: s.version + 1 };
+    });
+    if (isTauri()) {
+      void markKnownNameIpc(key).catch((err) => {
+        console.error('[wordbrain] mark_known_name IPC failed', err);
       });
     }
   },
@@ -86,15 +116,32 @@ export const useWordStore = create<WordState>((set, get) => ({
     });
   },
   isKnown: (lemma) => get().known.has(lemma.toLowerCase()),
-  hydrateFrom: (lemmas) => {
+  isKnownName: (lemma, surface) => {
+    if (surface && !looksLikeNameToken(surface)) return false;
+    return get().knownNames.has(normalizeNameKey(lemma));
+  },
+  hydrateFrom: (lemmas, names = BUILTIN_KNOWN_NAMES) => {
     const next = new Set<string>();
     for (const l of lemmas) next.add(l.toLowerCase());
-    set((s) => ({ known: next, hydrated: true, version: s.version + 1 }));
+    const nextNames = new Set<string>();
+    for (const n of names) {
+      const key = normalizeNameKey(n);
+      if (key) nextNames.add(key);
+    }
+    set((s) => ({ known: next, knownNames: nextNames, hydrated: true, version: s.version + 1 }));
   },
 }));
 
 export function isLemmaKnown(lemma: string): boolean {
   return useWordStore.getState().known.has(lemma.toLowerCase());
+}
+
+export function isKnownNameToken(lemma: string, surface: string): boolean {
+  return looksLikeNameToken(surface) && useWordStore.getState().isKnownName(lemma);
+}
+
+export function isReaderTokenKnown(lemma: string, surface: string): boolean {
+  return isLemmaKnown(lemma) || isKnownNameToken(lemma, surface);
 }
 
 /**
@@ -107,7 +154,9 @@ export async function hydrateFromDb(): Promise<number> {
     useWordStore.setState((s) => ({ hydrated: true, version: s.version + 1 }));
     return useWordStore.getState().known.size;
   }
-  const lemmas = await getAllKnownLemmas();
-  useWordStore.getState().hydrateFrom(lemmas);
+  const [lemmas, names] = await Promise.all([getAllKnownLemmas(), getAllKnownNames()]);
+  useWordStore.getState().hydrateFrom(lemmas, names);
   return lemmas.length;
 }
+
+export { looksLikeNameToken };

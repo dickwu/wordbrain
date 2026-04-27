@@ -139,8 +139,5 @@ async fn cache_round_trip_under_10ms() {
     }
     durations.sort();
     let p50 = durations[durations.len() / 2];
-    assert!(
-        p50 < 10_000,
-        "p50 cache hit {p50} µs exceeds 10 ms budget"
-    );
+    assert!(p50 < 10_000, "p50 cache hit {p50} µs exceeds 10 ms budget");
 }

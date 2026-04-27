@@ -10,6 +10,10 @@ dist
 src-tauri/target
 src-tauri/gen/schemas
 
+# Sub-crate build artifacts (workspace member private targets / lockfiles)
+src-tauri/crates/*/target/
+src-tauri/crates/*/Cargo.lock
+
 # Environment files
 .env
 .env.local
@@ -47,7 +51,7 @@ Thumbs.db
 
 build-windows.sh
 
-next-env.d.
+next-env.d.ts
 
 .cursor/
 

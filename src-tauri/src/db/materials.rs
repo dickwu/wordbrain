@@ -199,9 +199,11 @@ pub async fn save_material_on_conn(
         let mut rows = conn
             .query(
                 "SELECT COUNT(DISTINCT wm.word_id) \
-                   FROM word_materials wm \
-                   JOIN words w ON w.id = wm.word_id \
-                  WHERE wm.material_id = ?1 AND w.state <> 'known'",
+                  FROM word_materials wm \
+                  JOIN words w ON w.id = wm.word_id \
+                  WHERE wm.material_id = ?1 \
+                    AND w.state <> 'known' \
+                    AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)",
                 turso::params![material_id],
             )
             .await?;
@@ -261,7 +263,10 @@ pub async fn list_materials_on_conn(conn: &Connection) -> DbResult<Vec<MaterialS
                     COALESCE((SELECT COUNT(DISTINCT wm.word_id) \
                                FROM word_materials wm \
                                JOIN words w ON w.id = wm.word_id \
-                              WHERE wm.material_id = m.id AND w.state <> 'known'), 0) \
+                              WHERE wm.material_id = m.id \
+                                AND w.state <> 'known' \
+                                AND NOT EXISTS \
+                                  (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)), 0) \
                       AS unknown_count \
                FROM materials m \
               WHERE m.parent_material_id IS NULL \
@@ -307,7 +312,10 @@ pub async fn list_child_materials_on_conn(
                     COALESCE((SELECT COUNT(DISTINCT wm.word_id) \
                                FROM word_materials wm \
                                JOIN words w ON w.id = wm.word_id \
-                              WHERE wm.material_id = m.id AND w.state <> 'known'), 0) \
+                              WHERE wm.material_id = m.id \
+                                AND w.state <> 'known' \
+                                AND NOT EXISTS \
+                                  (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)), 0) \
                       AS unknown_count \
                FROM materials m \
               WHERE m.parent_material_id = ?1 \
@@ -443,7 +451,8 @@ pub async fn record_material_close_on_conn(
         conn.execute(
             "UPDATE words \
                 SET exposure_count = exposure_count + 1, updated_at = ?1 \
-              WHERE id IN (SELECT word_id FROM word_materials WHERE material_id = ?2)",
+              WHERE id IN (SELECT word_id FROM word_materials WHERE material_id = ?2) \
+                AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = words.lemma)",
             turso::params![now, material_id],
         )
         .await?;
@@ -463,7 +472,8 @@ pub async fn record_material_close_on_conn(
                    JOIN word_materials wm ON wm.word_id = w.id \
                   WHERE wm.material_id = ?1 \
                     AND w.state = 'learning' \
-                    AND w.exposure_count >= ?2",
+                    AND w.exposure_count >= ?2 \
+                    AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)",
                 turso::params![material_id, threshold],
             )
             .await?;
@@ -480,7 +490,8 @@ pub async fn record_material_close_on_conn(
                   WHERE id IN (SELECT wm.word_id FROM word_materials wm \
                                 WHERE wm.material_id = ?2) \
                     AND state = 'learning' \
-                    AND exposure_count >= ?3",
+                    AND exposure_count >= ?3 \
+                    AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = words.lemma)",
                 turso::params![now, material_id, threshold],
             )
             .await?;
@@ -493,7 +504,8 @@ pub async fn record_material_close_on_conn(
                    JOIN word_materials wm ON wm.word_id = w.id \
                   WHERE wm.material_id = ?1 \
                     AND w.state = 'unknown' \
-                    AND w.exposure_count >= ?2",
+                    AND w.exposure_count >= ?2 \
+                    AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)",
                 turso::params![material_id, threshold],
             )
             .await?;
@@ -509,7 +521,8 @@ pub async fn record_material_close_on_conn(
                   WHERE id IN (SELECT wm.word_id FROM word_materials wm \
                                 WHERE wm.material_id = ?2) \
                     AND state = 'unknown' \
-                    AND exposure_count >= ?3",
+                    AND exposure_count >= ?3 \
+                    AND NOT EXISTS (SELECT 1 FROM known_names kn WHERE kn.name = words.lemma)",
                 turso::params![now, material_id, threshold],
             )
             .await?;
@@ -535,7 +548,10 @@ pub async fn record_material_close_on_conn(
     }
 }
 
-pub async fn record_material_close(material_id: i64, threshold: i64) -> DbResult<MaterialCloseOutcome> {
+pub async fn record_material_close(
+    material_id: i64,
+    threshold: i64,
+) -> DbResult<MaterialCloseOutcome> {
     let conn = get_connection()?.lock().await;
     record_material_close_on_conn(&conn, material_id, threshold).await
 }
@@ -626,7 +642,10 @@ pub async fn recommend_next_on_conn(
                     COALESCE((SELECT COUNT(DISTINCT wm.word_id) \
                                FROM word_materials wm \
                                JOIN words w ON w.id = wm.word_id \
-                              WHERE wm.material_id = m.id AND w.state <> 'known'), 0) \
+                              WHERE wm.material_id = m.id \
+                                AND w.state <> 'known' \
+                                AND NOT EXISTS \
+                                  (SELECT 1 FROM known_names kn WHERE kn.name = w.lemma)), 0) \
                       AS unknown_count \
                FROM materials m \
               WHERE m.read_at IS NULL",

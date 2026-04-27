@@ -159,11 +159,8 @@ pub async fn build_network_on_conn(conn: &Connection, limit: i64) -> DbResult<Ne
         );
         let mut rows = conn.query(&sql, ()).await?;
         // Build a tiny id→index map so we don't do a linear scan per row.
-        let index: std::collections::HashMap<i64, usize> = nodes
-            .iter()
-            .enumerate()
-            .map(|(i, n)| (n.id, i))
-            .collect();
+        let index: std::collections::HashMap<i64, usize> =
+            nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
         while let Some(row) = rows.next().await? {
             let word_id: i64 = row.get(0)?;
             let material_id: i64 = row.get(1)?;
@@ -326,8 +323,11 @@ pub async fn cluster_for_word_on_conn(
     //    or the anchor. We use the same id-literal trick as build_network so
     //    the IN filter is explicit. Skip this pass if 1-hop was empty.
     if !one_hop_ids.is_empty() {
-        let already: std::collections::HashSet<i64> =
-            one_hop_ids.iter().copied().chain(std::iter::once(anchor_id)).collect();
+        let already: std::collections::HashSet<i64> = one_hop_ids
+            .iter()
+            .copied()
+            .chain(std::iter::once(anchor_id))
+            .collect();
         let id_list = one_hop_ids
             .iter()
             .map(i64::to_string)
@@ -363,12 +363,7 @@ pub async fn cluster_for_word_on_conn(
                 hop: 2,
                 shared_materials: Vec::new(),
             });
-            if neighbours
-                .iter()
-                .filter(|n| n.hop == 2)
-                .count() as i64
-                >= max
-            {
+            if neighbours.iter().filter(|n| n.hop == 2).count() as i64 >= max {
                 break;
             }
         }
@@ -382,10 +377,7 @@ pub async fn cluster_for_word_on_conn(
     }))
 }
 
-pub async fn cluster_for_word(
-    lemma: &str,
-    max_per_hop: i64,
-) -> DbResult<Option<ClusterPayload>> {
+pub async fn cluster_for_word(lemma: &str, max_per_hop: i64) -> DbResult<Option<ClusterPayload>> {
     let conn = get_connection()?.lock().await;
     cluster_for_word_on_conn(&conn, lemma, max_per_hop).await
 }

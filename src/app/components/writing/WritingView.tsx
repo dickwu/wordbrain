@@ -11,8 +11,9 @@ import {
   WORD_HIGHLIGHT_REBUILD,
   type WordHighlightClickPayload,
 } from '@/app/components/reader/WordHighlightExtension';
-import { WordCardPopover } from '@/app/components/reader/WordCardPopover';
-import { useWordStore, isLemmaKnown } from '@/app/stores/wordStore';
+import { useWordStore, isReaderTokenKnown } from '@/app/stores/wordStore';
+import { lemmatize } from '@/app/lib/tokenizer';
+import { WordLookupModal, normalizeLookupQuery } from '@/app/components/dictionary/WordLookupModal';
 import {
   isTauri,
   recentPracticeWordsIpc,
@@ -43,7 +44,7 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
   const [activeIdx, setActiveIdx] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<WritingFeedbackIpc | null>(null);
-  const [synonymPopover, setSynonymPopover] = useState<WordHighlightClickPayload | null>(null);
+  const [wordLookup, setWordLookup] = useState<WordHighlightClickPayload | null>(null);
   const editorRef = useRef<Editor | null>(null);
   const version = useWordStore((s) => s.version);
 
@@ -79,12 +80,12 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
         placeholder: 'Write a sentence using the highlighted target word — submit when ready.',
       }),
       WordHighlightExtension.configure({
-        isKnown: isLemmaKnown,
-        onClickUnknown: (payload) => setSynonymPopover(payload),
+        isKnown: isReaderTokenKnown,
+        onClickUnknown: (payload) => setWordLookup(payload),
       }),
       SynonymSpanExtension.configure({
         onClickSynonym: (payload) =>
-          setSynonymPopover({
+          setWordLookup({
             lemma: payload.lemma,
             surface: payload.lemma,
             from: payload.from,
@@ -184,6 +185,19 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
 
   const onKeepMine = useCallback(() => setFeedback(null), []);
 
+  const openSelectedWord = () => {
+    const surface = window.getSelection?.()?.toString().trim() ?? '';
+    const normalized = normalizeLookupQuery(surface);
+    if (!normalized) return;
+    setWordLookup({
+      lemma: lemmatize(normalized),
+      surface,
+      from: 0,
+      to: 0,
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+    });
+  };
+
   const sidebar = useMemo(
     () => (
       <div
@@ -252,7 +266,7 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
                 <Tag color="blue">{activeWord.lemma}</Tag>
                 <Tag>level {activeWord.level}</Tag>
               </Space>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative' }} onDoubleClick={openSelectedWord}>
                 <EditorContent
                   editor={editor}
                   style={{
@@ -266,16 +280,14 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
                     fontSize: 15,
                   }}
                 />
-                {synonymPopover && editor && (
-                  <WordCardPopover
-                    payload={synonymPopover}
+                {wordLookup && editor && (
+                  <WordLookupModal
+                    visible={true}
+                    initialQuery={wordLookup.lemma}
+                    surface={wordLookup.surface}
                     contextSentence={editor.getText()}
-                    onClose={() => setSynonymPopover(null)}
-                    onMarkKnown={() => {
-                      useWordStore.getState().markKnown(synonymPopover.lemma);
-                      message.success(`Marked "${synonymPopover.surface}" as known`);
-                      setSynonymPopover(null);
-                    }}
+                    autoSearch={true}
+                    onClose={() => setWordLookup(null)}
                   />
                 )}
               </div>

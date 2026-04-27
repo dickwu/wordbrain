@@ -72,7 +72,8 @@ export interface CustomDictionaryLookupResult {
   elapsed_ms: number;
 }
 
-export interface DictionaryCloudConfig {
+export interface UploadServerConfig {
+  name: string;
   enabled: boolean;
   uploadEnabled: boolean;
   endpointScheme: string;
@@ -86,7 +87,10 @@ export interface DictionaryCloudConfig {
   hasApiToken: boolean;
 }
 
-export interface DictionaryCloudConfigInput {
+export interface UploadServerConfigInput {
+  name?: string;
+  id?: string;
+  accountId?: string;
   enabled?: boolean;
   uploadEnabled?: boolean;
   endpointScheme?: string;
@@ -98,7 +102,17 @@ export interface DictionaryCloudConfigInput {
   accessKeyId?: string;
   secretAccessKey?: string;
   apiToken?: string;
+  token?: string;
+  key?: {
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    apiToken?: string;
+    token?: string;
+  };
 }
+
+export type DictionaryCloudConfig = UploadServerConfig;
+export type DictionaryCloudConfigInput = UploadServerConfigInput;
 
 export interface DictionaryResourceUploadResult {
   dictionaryCount: number;
@@ -150,33 +164,39 @@ export async function lookupCustomDictionary(
   });
 }
 
-export async function getDictionaryCloudConfig(): Promise<DictionaryCloudConfig> {
+const DEFAULT_UPLOAD_SERVER_CONFIG: UploadServerConfig = {
+  name: '',
+  enabled: false,
+  uploadEnabled: false,
+  endpointScheme: 'https',
+  endpointHost: '',
+  bucket: '',
+  publicDomainScheme: 'https',
+  publicDomainHost: '',
+  prefix: 'wordbrain/resources',
+  hasAccessKeyId: false,
+  hasSecretAccessKey: false,
+  hasApiToken: false,
+};
+
+export async function getUploadServerConfig(): Promise<UploadServerConfig> {
   if (!isTauri()) {
-    return {
-      enabled: false,
-      uploadEnabled: false,
-      endpointScheme: 'https',
-      endpointHost: '',
-      bucket: '',
-      publicDomainScheme: 'https',
-      publicDomainHost: '',
-      prefix: 'wordbrain/dictionaries',
-      hasAccessKeyId: false,
-      hasSecretAccessKey: false,
-      hasApiToken: false,
-    };
+    return DEFAULT_UPLOAD_SERVER_CONFIG;
   }
-  return invoke<DictionaryCloudConfig>('get_dictionary_cloud_config');
+  return invoke<UploadServerConfig>('get_upload_server_config');
 }
 
-export async function saveDictionaryCloudConfig(
-  config: DictionaryCloudConfigInput
-): Promise<DictionaryCloudConfig> {
+export async function saveUploadServerConfig(
+  config: UploadServerConfigInput
+): Promise<UploadServerConfig> {
   if (!isTauri()) {
-    throw new Error('dictionary resource cloud config requires Tauri runtime');
+    throw new Error('upload server config requires Tauri runtime');
   }
-  return invoke<DictionaryCloudConfig>('save_dictionary_cloud_config', { config });
+  return invoke<UploadServerConfig>('save_upload_server_config', { config });
 }
+
+export const getDictionaryCloudConfig = getUploadServerConfig;
+export const saveDictionaryCloudConfig = saveUploadServerConfig;
 
 export async function uploadDictionaryResources(opts?: {
   dictionaryId?: number | null;

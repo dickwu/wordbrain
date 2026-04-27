@@ -88,6 +88,7 @@ pub struct CustomDictionaryLookupResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DictionaryCloudConfigView {
+    pub name: String,
     pub enabled: bool,
     pub upload_enabled: bool,
     pub endpoint_scheme: String,
@@ -117,13 +118,14 @@ pub struct DictionaryResourceUploadResult {
 type DictionaryCloudConfigStored = ResourceCloudSettings;
 type DictionaryCloudConfigResolved = ResourceCloudConfig;
 
-const DICTIONARY_CLOUD_SETTING_KEY: &str = "custom_dictionary_cloud_config";
+const DICTIONARY_CLOUD_SETTING_KEY: &str = "upload_server_config";
 const DICTIONARY_CLOUD_ACCESS_KEY: &str = "secret::dictionary_cloud_access_key_id";
 const DICTIONARY_CLOUD_SECRET_KEY: &str = "secret::dictionary_cloud_secret_access_key";
 const DICTIONARY_CLOUD_API_TOKEN_KEY: &str = "secret::dictionary_cloud_api_token";
 const MAX_CLOUD_RESOURCE_UPLOAD_BYTES: usize = 64 * 1024 * 1024;
-const DICTIONARY_CLOUD_DEFAULT_PREFIX: &str = "wordbrain/dictionaries";
+const DICTIONARY_CLOUD_DEFAULT_PREFIX: &str = "wordbrain/resources";
 const DICTIONARY_CLOUD_LEGACY_SETTING_KEYS: &[&str] = &[
+    "custom_dictionary_cloud_config",
     "dictionary_resource_cloud_config",
     "dictionary_r2_config",
     "resource_cloud_config",
@@ -149,6 +151,33 @@ pub async fn lookup_offline(app: AppHandle, lemma: String) -> Result<OfflineLook
 // ---------------------------------------------------------------------------
 // User MDict dictionaries
 // ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_upload_server_config(
+    _vault: State<'_, KeyVault>,
+) -> Result<DictionaryCloudConfigView, String> {
+    dictionary_cloud_config_view()
+        .await
+        .map_err(|e| format!("load upload server config: {e}"))
+}
+
+#[tauri::command]
+pub async fn save_upload_server_config(
+    _vault: State<'_, KeyVault>,
+    config: serde_json::Value,
+) -> Result<DictionaryCloudConfigView, String> {
+    let draft = cloud_config_draft_from_value(config, DICTIONARY_CLOUD_DEFAULT_PREFIX)
+        .map_err(|e| format!("parse upload server config: {e}"))?;
+    let stored = draft.settings.clone();
+
+    validate_cloud_stored_config(&stored).map_err(|e| format!("upload server config: {e}"))?;
+
+    persist_dictionary_cloud_config_draft(draft).await?;
+
+    dictionary_cloud_config_view()
+        .await
+        .map_err(|e| format!("reload upload server config: {e}"))
+}
 
 #[tauri::command]
 pub async fn get_dictionary_cloud_config(
@@ -190,6 +219,7 @@ fn validate_cloud_stored_config(config: &DictionaryCloudConfigStored) -> Result<
 async fn dictionary_cloud_config_view() -> Result<DictionaryCloudConfigView, String> {
     let stored = load_dictionary_cloud_config().await?;
     Ok(DictionaryCloudConfigView {
+        name: stored.name,
         enabled: stored.enabled,
         upload_enabled: stored.upload_enabled,
         endpoint_scheme: stored.endpoint_scheme,

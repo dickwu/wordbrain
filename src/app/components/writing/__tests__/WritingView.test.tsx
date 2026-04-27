@@ -12,11 +12,15 @@ vi.mock('@tauri-apps/api/core', () => ({
 // can mount without throwing on `setContent`/`focus()`.
 function installLayoutPolyfills() {
   const empty = () => [] as unknown as DOMRectList;
-  if (!('getClientRects' in Range.prototype)) {
-    Range.prototype.getClientRects = empty;
+  const rangePrototype = Range.prototype as Range & {
+    getClientRects?: () => DOMRectList;
+    getBoundingClientRect?: () => DOMRect;
+  };
+  if (!rangePrototype.getClientRects) {
+    rangePrototype.getClientRects = empty;
   }
-  if (!('getBoundingClientRect' in Range.prototype)) {
-    Range.prototype.getBoundingClientRect = () =>
+  if (!rangePrototype.getBoundingClientRect) {
+    rangePrototype.getBoundingClientRect = () =>
       ({
         x: 0,
         y: 0,

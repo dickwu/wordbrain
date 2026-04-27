@@ -3,7 +3,7 @@
 //! Story Review, Writing Train, MCQ explanations and synonym extraction all
 //! route through [`chain::ai_call`], which tries `claude -p` first and falls
 //! back to `codex exec` if the primary fails. Both channels are spawned via
-//! `tokio::process::Command` with a sandboxed environment (HOME + PATH only).
+//! `tokio::process::Command` with a small allowlisted environment.
 //!
 //! No network code lives here — the only HTTP path stays in
 //! `commands::dict::lookup_ai`, gated behind an opt-in Settings toggle.

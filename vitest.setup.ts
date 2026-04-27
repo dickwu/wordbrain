@@ -14,15 +14,15 @@ if (typeof window !== 'undefined') {
       dispatchEvent: () => false,
     });
   }
-  if (!('ResizeObserver' in window)) {
+  if (typeof ResizeObserver === 'undefined') {
     class ResizeObserverPolyfill {
-      observe() {}
-      unobserve() {}
+      constructor(_callback: ResizeObserverCallback) {}
+      observe(_target: Element, _options?: ResizeObserverOptions) {}
+      unobserve(_target: Element) {}
       disconnect() {}
     }
-    // @ts-expect-error — patching jsdom global
-    window.ResizeObserver = ResizeObserverPolyfill;
-    // @ts-expect-error — also expose on globalThis for libraries that read it directly
-    globalThis.ResizeObserver = ResizeObserverPolyfill;
+    const resizeObserverPolyfill = ResizeObserverPolyfill as typeof ResizeObserver;
+    window.ResizeObserver = resizeObserverPolyfill;
+    globalThis.ResizeObserver = resizeObserverPolyfill;
   }
 }

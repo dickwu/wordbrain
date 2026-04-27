@@ -1,23 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  App as AntApp,
-  Button,
-  Divider,
-  Drawer,
-  Layout,
-  Space,
-  theme,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { App as AntApp, Button, Divider, Layout, Space, theme, Tooltip, Typography } from 'antd';
 import {
   BookOutlined,
   BulbFilled,
   BulbOutlined,
   EditOutlined,
   FileTextOutlined,
+  HistoryOutlined,
   PlusOutlined,
   ProfileOutlined,
   ReadOutlined,
@@ -32,14 +23,13 @@ import {
   type ImportedFile,
 } from '@/app/components/reader/MaterialImportModal';
 import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
-import { AiPanel } from '@/app/components/settings/AiPanel';
-import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
-import { DictionarySettingsPanel } from '@/app/components/settings/DictionarySettingsPanel';
-import { GeneralSettingsPanel } from '@/app/components/settings/GeneralSettingsPanel';
+import { SettingsView } from '@/app/components/settings/SettingsView';
 import { StatusBar } from '@/app/components/common/StatusBar';
 import { LibraryView } from '@/app/components/library/LibraryView';
 import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
 import { DictionaryFloat } from '@/app/components/dictionary/DictionaryFloat';
+import { SearchHistoryView } from '@/app/components/dictionary/SearchHistoryView';
+import { WordLookupModal } from '@/app/components/dictionary/WordLookupModal';
 import { NetworkView } from '@/app/components/network/NetworkView';
 import { WordsView } from '@/app/components/words/WordsView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
@@ -75,12 +65,21 @@ const { Title, Paragraph, Text } = Typography;
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode = 'reader' | 'library' | 'review' | 'story' | 'writing' | 'network' | 'words';
+type ViewMode =
+  | 'reader'
+  | 'library'
+  | 'review'
+  | 'story'
+  | 'writing'
+  | 'network'
+  | 'words'
+  | 'searches'
+  | 'settings';
 
 export default function Home() {
   const { message } = AntApp.useApp();
   const [importOpen, setImportOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyLookup, setHistoryLookup] = useState<{ word: string; nonce: number } | null>(null);
   const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [view, setView] = useState<ViewMode>('reader');
@@ -484,9 +483,16 @@ export default function Home() {
             onClick={() => setView('network')}
           />
           <SidebarEntry
+            icon={<HistoryOutlined />}
+            label="Searches"
+            active={view === 'searches'}
+            onClick={() => setView('searches')}
+          />
+          <SidebarEntry
             icon={<SettingOutlined />}
             label="Settings"
-            onClick={() => setSettingsOpen(true)}
+            active={view === 'settings'}
+            onClick={() => setView('settings')}
           />
         </Space>
         <Divider style={{ margin: '24px 12px' }} />
@@ -539,7 +545,7 @@ export default function Home() {
           ) : view === 'review' ? (
             <ReviewSession />
           ) : view === 'story' ? (
-            <StoryView />
+            <StoryView onDrillLemma={setWordDrawerLemma} />
           ) : view === 'writing' ? (
             <WritingView />
           ) : view === 'network' ? (
@@ -562,6 +568,10 @@ export default function Home() {
             />
           ) : view === 'words' ? (
             <WordsView onSwitchToReader={() => setView('reader')} />
+          ) : view === 'searches' ? (
+            <SearchHistoryView onSearch={(word) => setHistoryLookup({ word, nonce: Date.now() })} />
+          ) : view === 'settings' ? (
+            <SettingsView />
           ) : (
             <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
           )}
@@ -569,26 +579,24 @@ export default function Home() {
         <StatusBar />
       </Layout>
 
-      <Drawer
-        title="Settings"
-        placement="right"
-        size={520}
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      >
-        <Space orientation="vertical" style={{ width: '100%' }} size={12}>
-          <GeneralSettingsPanel />
-          <DictionarySettingsPanel />
-          <AiPanel />
-          <ApiKeysPanel />
-        </Space>
-      </Drawer>
-
       <MaterialsForWordDrawer
         lemma={wordDrawerLemma}
         onClose={() => setWordDrawerLemma(null)}
         onOpenMaterial={onOpenMaterialFromDrawer}
       />
+
+      {historyLookup && (
+        <WordLookupModal
+          key={`${historyLookup.word}-${historyLookup.nonce}`}
+          visible={true}
+          initialQuery={historyLookup.word}
+          contextSentence={historyLookup.word}
+          autoSearch={true}
+          onClose={() => setHistoryLookup(null)}
+          onOpenSettings={() => setView('settings')}
+          onShowLinked={setWordDrawerLemma}
+        />
+      )}
 
       <MaterialImportModal
         open={importOpen}
@@ -615,7 +623,10 @@ export default function Home() {
         }}
       />
 
-      <DictionaryFloat onOpenSettings={() => setSettingsOpen(true)} />
+      <DictionaryFloat
+        onOpenSettings={() => setView('settings')}
+        onShowLinked={setWordDrawerLemma}
+      />
     </Layout>
   );
 }

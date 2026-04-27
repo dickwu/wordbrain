@@ -10,6 +10,7 @@
 
 import { tokenize } from '@/app/lib/tokenizer';
 import type { SaveMaterialInput, TokenEdgeInput } from '@/app/lib/ipc';
+import { isKnownNameToken } from '@/app/stores/wordStore';
 
 const PREVIEW_MAX = 160;
 
@@ -51,6 +52,7 @@ export function buildMaterialInput({
   const byLemma = new Map<string, TokenEdgeInput>();
   for (const t of tokens) {
     if (!t.lemma) continue;
+    if (isKnownNameToken(t.lemma, t.surface)) continue;
     const existing = byLemma.get(t.lemma);
     if (existing) {
       existing.occurrence_count += 1;

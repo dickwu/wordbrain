@@ -14,7 +14,7 @@ export interface WordHighlightClickPayload {
 }
 
 export interface WordHighlightOptions {
-  isKnown: (lemma: string) => boolean;
+  isKnown: (lemma: string, surface: string) => boolean;
   onClickUnknown?: (payload: WordHighlightClickPayload) => void;
 }
 
@@ -25,14 +25,14 @@ export const WORD_HIGHLIGHT_REBUILD = 'rebuild';
 
 function buildDecorations(
   doc: ProseMirrorNode,
-  isKnown: (lemma: string) => boolean
+  isKnown: (lemma: string, surface: string) => boolean
 ): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (!node.isText || !node.text) return;
     const tokens = tokenize(node.text);
     for (const t of tokens) {
-      if (isKnown(t.lemma)) continue; // paint only unknowns for perf
+      if (isKnown(t.lemma, t.surface)) continue; // paint only unknowns for perf
       const from = pos + t.start;
       const to = pos + t.end;
       decorations.push(

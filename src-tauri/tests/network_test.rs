@@ -26,7 +26,11 @@ fn token(lemma: &str, pos: i64, preview: &str) -> materials::TokenEdge {
     }
 }
 
-fn mk_input(title: &str, raw: &str, tokens: Vec<materials::TokenEdge>) -> materials::SaveMaterialInput {
+fn mk_input(
+    title: &str,
+    raw: &str,
+    tokens: Vec<materials::TokenEdge>,
+) -> materials::SaveMaterialInput {
     let unique = tokens.len() as i64;
     materials::SaveMaterialInput {
         title: title.to_string(),
@@ -93,11 +97,7 @@ async fn build_network_returns_nodes_and_weighted_edges() {
 
     materials::save_material_on_conn(
         &conn,
-        &mk_input(
-            "doc-c",
-            "loner",
-            vec![token("loner", 0, "loner")],
-        ),
+        &mk_input("doc-c", "loner", vec![token("loner", 0, "loner")]),
     )
     .await
     .unwrap();
@@ -119,13 +119,7 @@ async fn build_network_returns_nodes_and_weighted_edges() {
     assert_eq!(the.state, "known");
 
     // Edge (the, fox) appears in both docs → weight=2. (the, quick) weight=1.
-    let id_of = |lemma: &str| -> i64 {
-        net.nodes
-            .iter()
-            .find(|n| n.lemma == lemma)
-            .unwrap()
-            .id
-    };
+    let id_of = |lemma: &str| -> i64 { net.nodes.iter().find(|n| n.lemma == lemma).unwrap().id };
     let the_id = id_of("the");
     let fox_id = id_of("fox");
     let quick_id = id_of("quick");
@@ -171,7 +165,10 @@ async fn build_network_respects_limit_and_picks_most_connected() {
             &mk_input(
                 &format!("doc-{i}"),
                 "hub partner",
-                vec![token("hub", 0, "hub partner"), token(&partner, 4, "hub partner")],
+                vec![
+                    token("hub", 0, "hub partner"),
+                    token(&partner, 4, "hub partner"),
+                ],
             ),
         )
         .await
@@ -180,7 +177,10 @@ async fn build_network_respects_limit_and_picks_most_connected() {
 
     let net = network::build_network_on_conn(&conn, 3).await.unwrap();
     assert_eq!(net.nodes.len(), 3);
-    assert_eq!(net.nodes[0].lemma, "hub", "hub should dominate degree ordering");
+    assert_eq!(
+        net.nodes[0].lemma, "hub",
+        "hub should dominate degree ordering"
+    );
     assert_eq!(net.nodes[0].degree, 10);
 
     // Companion nodes each have degree 1; exactly two survive the cap.
@@ -263,10 +263,17 @@ async fn cluster_for_word_returns_hops_and_shared_materials() {
         .collect();
     assert!(hops.contains(&("alpha".to_string(), 1)), "{hops:?}");
     assert!(hops.contains(&("beta".to_string(), 2)), "{hops:?}");
-    assert!(!hops.iter().any(|(l, _)| l == "gamma"), "gamma leaked: {hops:?}");
+    assert!(
+        !hops.iter().any(|(l, _)| l == "gamma"),
+        "gamma leaked: {hops:?}"
+    );
 
     // The 1-hop neighbour carries shared-material previews.
-    let alpha = cluster.neighbours.iter().find(|n| n.lemma == "alpha").unwrap();
+    let alpha = cluster
+        .neighbours
+        .iter()
+        .find(|n| n.lemma == "alpha")
+        .unwrap();
     assert_eq!(alpha.shared_materials.len(), 1);
     assert_eq!(alpha.shared_materials[0].title, "doc-a");
     assert_eq!(
@@ -275,7 +282,11 @@ async fn cluster_for_word_returns_hops_and_shared_materials() {
     );
 
     // 2-hop neighbours leave shared_materials empty to keep the payload bounded.
-    let beta = cluster.neighbours.iter().find(|n| n.lemma == "beta").unwrap();
+    let beta = cluster
+        .neighbours
+        .iter()
+        .find(|n| n.lemma == "beta")
+        .unwrap();
     assert!(beta.shared_materials.is_empty());
 }
 

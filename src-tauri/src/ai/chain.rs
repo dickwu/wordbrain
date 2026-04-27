@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::ai::cli_provider::{
-    invoke, CliChannel, CliInvocation, CliResponse, DEFAULT_TIMEOUT,
+    invoke, resolved_channel_binary_path, CliChannel, CliInvocation, CliResponse, DEFAULT_TIMEOUT,
 };
 
 /// What `ai_call` hands back to callers on success.
@@ -51,10 +51,7 @@ const DEFAULT_ORDER: &[CliChannel] = &[CliChannel::ClaudeP, CliChannel::CodexCli
 
 /// Public entry: run `prompt` against the chain, optionally with a JSON
 /// schema for structured output. The first channel to succeed wins.
-pub async fn ai_call(
-    prompt: &str,
-    schema: Option<&Value>,
-) -> Result<AiCallOutcome, AiUnavailable> {
+pub async fn ai_call(prompt: &str, schema: Option<&Value>) -> Result<AiCallOutcome, AiUnavailable> {
     ai_call_with_order(prompt, schema, DEFAULT_ORDER).await
 }
 
@@ -119,9 +116,7 @@ fn detect_now() -> ProviderStatusReport {
     let providers = DEFAULT_ORDER
         .iter()
         .map(|c| {
-            let resolved = which::which(c.binary())
-                .ok()
-                .map(|p| p.to_string_lossy().into_owned());
+            let resolved = resolved_channel_binary_path(*c);
             ProviderStatus {
                 channel: c.label().to_string(),
                 binary: c.binary().to_string(),
@@ -162,21 +157,33 @@ mod tests {
 
     #[tokio::test]
     async fn fallback_then_failure_uses_secondary_label() {
-        // Both channels resolve to nothing on a wiped PATH — the loop should
+        // Both channels resolve to bogus override paths — the loop should
         // attempt claude-p first, then codex-cli, then surface AiUnavailable
-        // with the codex-cli error as the last_error. cli_provider builds the
-        // subprocess env from `std::env::var("PATH")` at spawn time, so this
-        // mutation is observed; restore PATH afterward to avoid leaking into
-        // sibling tests in the same binary.
+        // with the codex-cli error as the last_error. Restore env afterward to
+        // avoid leaking into sibling tests in the same binary.
         let prev_path = std::env::var("PATH").unwrap_or_default();
+        let prev_claude = std::env::var_os("WORDBRAIN_CLAUDE_BIN");
+        let prev_codex = std::env::var_os("WORDBRAIN_CODEX_BIN");
         std::env::set_var("PATH", "/nonexistent");
+        std::env::set_var("WORDBRAIN_CLAUDE_BIN", "/nonexistent/wb-claude");
+        std::env::set_var("WORDBRAIN_CODEX_BIN", "/nonexistent/wb-codex");
         let result = ai_call("ping", None).await;
         std::env::set_var("PATH", prev_path);
+        restore_env("WORDBRAIN_CLAUDE_BIN", prev_claude);
+        restore_env("WORDBRAIN_CODEX_BIN", prev_codex);
         let err = result.expect_err("both gone");
         assert_eq!(
             err.tried,
             vec!["claude-p".to_string(), "codex-cli".to_string()]
         );
         assert!(err.last_error.contains("codex-cli"));
+    }
+
+    fn restore_env(key: &str, value: Option<std::ffi::OsString>) {
+        if let Some(value) = value {
+            std::env::set_var(key, value);
+        } else {
+            std::env::remove_var(key);
+        }
     }
 }

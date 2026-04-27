@@ -1,9 +1,9 @@
 //! Subprocess wrappers for `claude -p` and `codex exec`.
 //!
 //! Both binaries are invoked through `tokio::process::Command` with a
-//! sandboxed environment. Only `HOME` and `PATH` are forwarded by default —
-//! Codex additionally needs `CODEX_HOME` (optional override of `~/.codex`) so
-//! we forward it when the parent process has it set.
+//! sandboxed environment: HOME/PATH, login identity for CLI auth, and a small
+//! provider-specific allowlist such as `CODEX_HOME` or API-key env vars when
+//! the parent process has them set.
 //!
 //! Validated flag surface (2026-04-24):
 //! * `claude -p <prompt> --output-format=json` — the response object exposes
@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -135,7 +136,7 @@ pub async fn invoke(inv: CliInvocation<'_>) -> Result<CliResponse, CliError> {
     let binary_str = inv
         .binary_override
         .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| inv.channel.binary().to_string());
+        .unwrap_or_else(|| resolve_channel_binary(inv.channel));
 
     let mut cmd = Command::new(&binary_str);
     cmd.env_clear();
@@ -182,9 +183,14 @@ pub async fn invoke(inv: CliInvocation<'_>) -> Result<CliResponse, CliError> {
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
     if !output.status.success() {
+        let diagnostic = if stderr.trim().is_empty() {
+            stdout.trim().to_string()
+        } else {
+            stderr
+        };
         return Err(CliError::NonZeroExit {
             status: output.status.code().unwrap_or(-1),
-            stderr,
+            stderr: diagnostic,
         });
     }
 
@@ -232,22 +238,206 @@ fn configure(cmd: &mut Command, inv: &CliInvocation<'_>) -> bool {
     }
 }
 
-/// Build the minimal env passed to the subprocess. Only HOME + PATH by
-/// default; Codex also needs `CODEX_HOME` when the parent set it.
+/// Resolve the binary path used for a CLI channel. Desktop app launches often
+/// have a short PATH, so prefer the known install locations before falling
+/// back to PATH lookup. Env overrides are intentionally first for debugging.
+pub fn resolve_channel_binary(channel: CliChannel) -> String {
+    if let Ok(override_path) = std::env::var(binary_override_env(channel)) {
+        if !override_path.trim().is_empty() {
+            return override_path;
+        }
+    }
+
+    for candidate in preferred_binary_paths(channel) {
+        if is_executable(&candidate) {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+
+    which::which(channel.binary())
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| channel.binary().to_string())
+}
+
+pub fn resolved_channel_binary_path(channel: CliChannel) -> Option<String> {
+    let resolved = resolve_channel_binary(channel);
+    let path = Path::new(&resolved);
+    if is_executable(path) {
+        return Some(resolved);
+    }
+    which::which(&resolved)
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn binary_override_env(channel: CliChannel) -> &'static str {
+    match channel {
+        CliChannel::ClaudeP => "WORDBRAIN_CLAUDE_BIN",
+        CliChannel::CodexCli => "WORDBRAIN_CODEX_BIN",
+    }
+}
+
+fn preferred_binary_paths(channel: CliChannel) -> Vec<PathBuf> {
+    let home = std::env::var("HOME").ok().filter(|s| !s.is_empty());
+    match channel {
+        CliChannel::ClaudeP => {
+            let mut paths = Vec::new();
+            if let Some(home) = &home {
+                paths.push(PathBuf::from(home).join(".local/bin/claude"));
+            }
+            paths.extend([
+                PathBuf::from("/opt/homebrew/bin/claude"),
+                PathBuf::from("/usr/local/bin/claude"),
+            ]);
+            paths
+        }
+        CliChannel::CodexCli => {
+            let mut paths = vec![PathBuf::from("/opt/homebrew/bin/codex")];
+            if let Some(home) = &home {
+                paths.push(PathBuf::from(home).join(".local/bin/codex"));
+                paths.push(PathBuf::from(home).join(".cargo/bin/codex"));
+            }
+            paths.extend([
+                PathBuf::from("/usr/local/bin/codex"),
+                PathBuf::from("/Applications/Codex.app/Contents/Resources/codex"),
+            ]);
+            paths
+        }
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+/// Build the minimal env passed to the subprocess. HOME + PATH are the base,
+/// but Claude Code OAuth/keychain auth also needs the login identity
+/// (`USER`/`LOGNAME`); without those it reports "Not logged in" even when a
+/// normal terminal session is authenticated.
 fn sandboxed_env(channel: CliChannel) -> HashMap<String, String> {
     let mut env = HashMap::new();
     if let Ok(home) = std::env::var("HOME") {
         env.insert("HOME".to_string(), home);
     }
-    if let Ok(path) = std::env::var("PATH") {
-        env.insert("PATH".to_string(), path);
+    env.insert("PATH".to_string(), effective_path());
+
+    for key in ["USER", "LOGNAME", "SHELL", "TMPDIR"] {
+        if let Ok(value) = std::env::var(key) {
+            if !value.is_empty() {
+                env.insert(key.to_string(), value);
+            }
+        }
     }
+
+    if !env.contains_key("USER") || !env.contains_key("LOGNAME") {
+        if let Some(login) = infer_login_name() {
+            env.entry("USER".to_string())
+                .or_insert_with(|| login.clone());
+            env.entry("LOGNAME".to_string()).or_insert(login);
+        }
+    }
+
     if matches!(channel, CliChannel::CodexCli) {
-        if let Ok(codex_home) = std::env::var("CODEX_HOME") {
-            env.insert("CODEX_HOME".to_string(), codex_home);
+        for key in ["CODEX_HOME", "OPENAI_API_KEY"] {
+            if let Ok(value) = std::env::var(key) {
+                if !value.is_empty() {
+                    env.insert(key.to_string(), value);
+                }
+            }
+        }
+        if !env.contains_key("CODEX_HOME") {
+            if let Some(home) = env.get("HOME") {
+                let codex_home = Path::new(home).join(".codex");
+                if codex_home.is_dir() {
+                    env.insert(
+                        "CODEX_HOME".to_string(),
+                        codex_home.to_string_lossy().into_owned(),
+                    );
+                }
+            }
+        }
+    }
+    if matches!(channel, CliChannel::ClaudeP) {
+        for key in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "CLAUDE_CONFIG_DIR",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                if !value.is_empty() {
+                    env.insert(key.to_string(), value);
+                }
+            }
         }
     }
     env
+}
+
+fn infer_login_name() -> Option<String> {
+    std::env::var("USER")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("LOGNAME").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .and_then(|home| {
+                    Path::new(&home)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                })
+                .filter(|s| !s.is_empty())
+        })
+}
+
+fn effective_path() -> String {
+    let mut parts: Vec<String> = std::env::var("PATH")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|p| !p.is_empty())
+        .map(|p| p.to_string())
+        .collect();
+
+    if let Ok(home) = std::env::var("HOME") {
+        append_path(&mut parts, &format!("{home}/.local/bin"));
+        append_path(&mut parts, &format!("{home}/.cargo/bin"));
+        append_path(&mut parts, &format!("{home}/.bun/bin"));
+    }
+    for p in [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ] {
+        append_path(&mut parts, p);
+    }
+
+    parts.join(":")
+}
+
+fn append_path(parts: &mut Vec<String>, value: &str) {
+    if parts.iter().any(|p| p == value) {
+        return;
+    }
+    parts.push(value.to_string());
 }
 
 /// Persist the schema to a temporary file so `codex exec --output-schema`
@@ -280,6 +470,9 @@ fn parse_response(channel: CliChannel, stdout: &str) -> Result<Option<Value>, Cl
                     channel: "claude-p",
                     source,
                 })?;
+            if let Some(structured) = outer.get("structured_output") {
+                return Ok(Some(structured.clone()));
+            }
             // The text payload lives under `result`. Many of our prompts ask
             // the model to return JSON directly, so try to deserialize it;
             // fall back to wrapping the raw string.
@@ -288,6 +481,7 @@ fn parse_response(channel: CliChannel, stdout: &str) -> Result<Option<Value>, Cl
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             match text {
+                Some(t) if t.trim().is_empty() => Ok(None),
                 Some(t) => match extract_json_payload(&t) {
                     Some(parsed) => Ok(Some(parsed)),
                     None => Ok(Some(Value::String(t))),
@@ -350,35 +544,69 @@ mod tests {
         })
         .to_string();
         let (_keep, fake) = echo_binary(&envelope);
-        let resp = invoke(
-            CliInvocation::new(CliChannel::ClaudeP, "ignored").with_binary_override(&fake),
-        )
-        .await
-        .expect("invoke");
+        let resp =
+            invoke(CliInvocation::new(CliChannel::ClaudeP, "ignored").with_binary_override(&fake))
+                .await
+                .expect("invoke");
         assert_eq!(resp.parsed.unwrap(), json!({"hello": "world"}));
     }
 
     #[tokio::test]
+    async fn parses_claude_structured_output_envelope() {
+        let envelope = serde_json::json!({
+            "type": "result",
+            "result": "",
+            "structured_output": {
+                "story_text": "Maya followed her ____ into the attic.",
+                "blanks": [
+                    {
+                        "index": 0,
+                        "target_word": "curiosity",
+                        "options": ["curiosity", "boredom", "anger", "hunger"],
+                        "correct_index": 0
+                    }
+                ]
+            }
+        })
+        .to_string();
+        let (_keep, fake) = echo_binary(&envelope);
+        let resp =
+            invoke(CliInvocation::new(CliChannel::ClaudeP, "ignored").with_binary_override(&fake))
+                .await
+                .expect("invoke");
+        assert_eq!(
+            resp.parsed.unwrap(),
+            json!({
+                "story_text": "Maya followed her ____ into the attic.",
+                "blanks": [
+                    {
+                        "index": 0,
+                        "target_word": "curiosity",
+                        "options": ["curiosity", "boredom", "anger", "hunger"],
+                        "correct_index": 0
+                    }
+                ]
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn parses_codex_trailing_object() {
-        let payload =
-            "[2026-04-24] codex thinking…\nfinal answer:\n{\"answer\":42,\"ok\":true}\n";
+        let payload = "[2026-04-24] codex thinking…\nfinal answer:\n{\"answer\":42,\"ok\":true}\n";
         let (_keep, fake) = echo_binary(payload);
-        let resp = invoke(
-            CliInvocation::new(CliChannel::CodexCli, "ignored").with_binary_override(&fake),
-        )
-        .await
-        .expect("invoke");
+        let resp =
+            invoke(CliInvocation::new(CliChannel::CodexCli, "ignored").with_binary_override(&fake))
+                .await
+                .expect("invoke");
         assert_eq!(resp.parsed.unwrap(), json!({"answer": 42, "ok": true}));
     }
 
     #[tokio::test]
     async fn missing_binary_is_spawn_error() {
         let bogus = OsString::from("/nonexistent/wb-no-such-binary-xyz");
-        let err = invoke(
-            CliInvocation::new(CliChannel::ClaudeP, "x").with_binary_override(&bogus),
-        )
-        .await
-        .expect_err("must fail");
+        let err = invoke(CliInvocation::new(CliChannel::ClaudeP, "x").with_binary_override(&bogus))
+            .await
+            .expect_err("must fail");
         assert!(matches!(err, CliError::Spawn { .. }));
     }
 

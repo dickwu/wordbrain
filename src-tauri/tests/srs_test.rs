@@ -78,16 +78,50 @@ async fn three_goods_across_seven_days_promotes_word_to_known_via_srs() {
     //     values are plausible but not canonical — the graduation rule only
     //     cares about reps and lapses. ---
     let schedule = [
-        (t0, SchedulingUpdate { stability: 1.0, difficulty: 5.0, elapsed_days: 0, scheduled_days: 3, due: t0 + 3 * DAY_MS }),
-        (t0 + 3 * DAY_MS, SchedulingUpdate { stability: 5.0, difficulty: 5.0, elapsed_days: 3, scheduled_days: 4, due: t0 + 7 * DAY_MS }),
-        (t0 + 7 * DAY_MS, SchedulingUpdate { stability: 15.0, difficulty: 5.0, elapsed_days: 4, scheduled_days: 10, due: t0 + 17 * DAY_MS }),
+        (
+            t0,
+            SchedulingUpdate {
+                stability: 1.0,
+                difficulty: 5.0,
+                elapsed_days: 0,
+                scheduled_days: 3,
+                due: t0 + 3 * DAY_MS,
+            },
+        ),
+        (
+            t0 + 3 * DAY_MS,
+            SchedulingUpdate {
+                stability: 5.0,
+                difficulty: 5.0,
+                elapsed_days: 3,
+                scheduled_days: 4,
+                due: t0 + 7 * DAY_MS,
+            },
+        ),
+        (
+            t0 + 7 * DAY_MS,
+            SchedulingUpdate {
+                stability: 15.0,
+                difficulty: 5.0,
+                elapsed_days: 4,
+                scheduled_days: 10,
+                due: t0 + 17 * DAY_MS,
+            },
+        ),
     ];
 
     let mut outcomes = Vec::new();
     for (now, upd) in &schedule {
-        let out = apply_rating_on_conn(&conn, lemma, RATING_GOOD, upd, *now, DEFAULT_GRADUATION_REPS)
-            .await
-            .expect("apply rating");
+        let out = apply_rating_on_conn(
+            &conn,
+            lemma,
+            RATING_GOOD,
+            upd,
+            *now,
+            DEFAULT_GRADUATION_REPS,
+        )
+        .await
+        .expect("apply rating");
         outcomes.push(out);
     }
 
@@ -171,9 +205,16 @@ async fn lapse_within_window_blocks_graduation_even_if_reps_reached() {
         scheduled_days: 1,
         due: t0 + DAY_MS,
     };
-    apply_rating_on_conn(&conn, lemma, /*Again*/ 1, &upd, t0, DEFAULT_GRADUATION_REPS)
-        .await
-        .unwrap();
+    apply_rating_on_conn(
+        &conn,
+        lemma,
+        /*Again*/ 1,
+        &upd,
+        t0,
+        DEFAULT_GRADUATION_REPS,
+    )
+    .await
+    .unwrap();
 
     // Three successful reps, all inside the 14-day lapse window.
     for step in 1..=3 {
@@ -185,9 +226,16 @@ async fn lapse_within_window_blocks_graduation_even_if_reps_reached() {
             scheduled_days: 2,
             due: now + 2 * DAY_MS,
         };
-        let out = apply_rating_on_conn(&conn, lemma, RATING_GOOD, &upd, now, DEFAULT_GRADUATION_REPS)
-            .await
-            .unwrap();
+        let out = apply_rating_on_conn(
+            &conn,
+            lemma,
+            RATING_GOOD,
+            &upd,
+            now,
+            DEFAULT_GRADUATION_REPS,
+        )
+        .await
+        .unwrap();
         assert!(
             !out.graduated_to_known,
             "recent lapse must block graduation (step {step})"
@@ -204,7 +252,10 @@ async fn lapse_within_window_blocks_graduation_even_if_reps_reached() {
         .unwrap();
     let row = rows.next().await.unwrap().expect("row");
     let state: String = row.get(0).unwrap();
-    assert_eq!(state, "learning", "lapse within window blocks 'known' promotion");
+    assert_eq!(
+        state, "learning",
+        "lapse within window blocks 'known' promotion"
+    );
 }
 
 #[tokio::test]

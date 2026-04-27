@@ -19,6 +19,7 @@ pub mod cache;
 pub mod custom_dicts;
 pub mod dict;
 pub mod materials;
+pub mod names;
 pub mod network;
 pub mod schema;
 pub mod settings;

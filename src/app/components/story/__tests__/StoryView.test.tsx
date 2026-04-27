@@ -71,6 +71,7 @@ describe('StoryView', () => {
           { id: 2, lemma: 'bravo', usageCount: 1, level: 1, firstSeenAt: 0, state: 'learning' },
         ];
       }
+      if (cmd === 'list_story_history') return [];
       throw new Error(`unexpected cmd ${cmd}`);
     });
 
@@ -111,6 +112,7 @@ describe('StoryView', () => {
           { id: 2, lemma: 'bravo', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
         ];
       }
+      if (cmd === 'list_story_history') return [];
       if (cmd === 'generate_story') return story;
       if (cmd === 'register_word_use') return ((args?.wordId as number) ?? 0) + 1;
       throw new Error(`unexpected cmd ${cmd}`);
@@ -118,6 +120,10 @@ describe('StoryView', () => {
 
     await renderStory();
     fireEvent.click(await screen.findByText(/Generate story/i));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('generate_story', { wordIds: [1, 2] });
+    });
 
     // Wait for the generated story prose so we know the selects are mounted.
     await waitFor(() => expect(screen.getByText(/pondered/)).toBeDefined());
@@ -164,6 +170,7 @@ describe('StoryView', () => {
           },
         ];
       }
+      if (cmd === 'list_story_history') return [];
       if (cmd === 'generate_story') return story;
       if (cmd === 'register_word_use') return 1;
       if (cmd === 'generate_mcq_explanation') return 'A pebble is a small stone, not a ghost.';
@@ -192,5 +199,284 @@ describe('StoryView', () => {
     await waitFor(() => {
       expect(screen.getByText(/pebble is a small stone/i)).toBeDefined();
     });
+  });
+
+  it('shows the generate picker by default even when story history exists', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'recent_practice_words') {
+        return [
+          { id: 1, lemma: 'alpha', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+        ];
+      }
+      if (cmd === 'list_story_history') {
+        return [
+          {
+            material_id: 42,
+            title: 'Latest Story',
+            created_at: 1_700_000_000_000,
+            read_at: null,
+            blank_count: 1,
+          },
+        ];
+      }
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+
+    await waitFor(() => expect(screen.getByText(/Generate story/i)).toBeDefined());
+    expect(screen.getByText('alpha')).toBeDefined();
+    expect(screen.getByText('Latest Story')).toBeDefined();
+    expect(screen.queryByText(/latest/)).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith('load_story', { materialId: 42 });
+  });
+
+  it('uses clicked tags to exclude words from new generation', async () => {
+    const story = {
+      material_id: 42,
+      story_text: 'The {{1}} pondered.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 1,
+          options: ['alpha', 'apex', 'amber', 'angle'],
+          correct_index: 0,
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'recent_practice_words') {
+        return [
+          { id: 1, lemma: 'alpha', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+          { id: 2, lemma: 'bravo', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+        ];
+      }
+      if (cmd === 'list_story_history') return [];
+      if (cmd === 'generate_story') return story;
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+    await screen.findByText(/Generate story/i);
+
+    const bravoTag = screen.getByText('bravo').closest('[role="button"]');
+    expect(bravoTag).toBeTruthy();
+    fireEvent.click(bravoTag!);
+    fireEvent.click(screen.getByText(/Generate story/i));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('generate_story', { wordIds: [1] });
+    });
+  });
+
+  it('uses the remove affordance to exclude a word from new generation', async () => {
+    const story = {
+      material_id: 42,
+      story_text: 'The {{1}} pondered.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 1,
+          options: ['alpha', 'apex', 'amber', 'angle'],
+          correct_index: 0,
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'recent_practice_words') {
+        return [
+          { id: 1, lemma: 'alpha', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+          { id: 2, lemma: 'bravo', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+        ];
+      }
+      if (cmd === 'list_story_history') return [];
+      if (cmd === 'generate_story') return story;
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+    await screen.findByText(/Generate story/i);
+
+    fireEvent.click(screen.getByLabelText('Remove bravo'));
+    fireEvent.click(screen.getByText(/Generate story/i));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('generate_story', { wordIds: [1] });
+    });
+  });
+
+  it('loads a clicked history story', async () => {
+    const latest = {
+      material_id: 2,
+      story_text: 'New {{1}} story.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 2,
+          options: ['bravo', 'beach', 'birch', 'bench'],
+          correct_index: 0,
+        },
+      ],
+    };
+    const older = {
+      material_id: 1,
+      story_text: 'Old {{1}} story.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 1,
+          options: ['alpha', 'apex', 'amber', 'angle'],
+          correct_index: 0,
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'recent_practice_words') return [];
+      if (cmd === 'list_story_history') {
+        return [
+          {
+            material_id: 2,
+            title: 'New Story',
+            created_at: 1_700_000_000_002,
+            read_at: null,
+            blank_count: 1,
+          },
+          {
+            material_id: 1,
+            title: 'Old Story',
+            created_at: 1_700_000_000_001,
+            read_at: null,
+            blank_count: 1,
+          },
+        ];
+      }
+      if (cmd === 'load_story') return args?.materialId === 1 ? older : latest;
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+    await waitFor(() => expect(screen.getByText('New Story')).toBeDefined());
+    expect(screen.getByText(/No recent low-level words/i)).toBeDefined();
+
+    const oldButton = screen.getByText('Old Story').closest('button');
+    expect(oldButton).toBeTruthy();
+    fireEvent.click(oldButton!);
+
+    await waitFor(() => expect(screen.getAllByText(/Old/).length).toBeGreaterThan(1));
+    expect(invokeMock).toHaveBeenCalledWith('load_story', { materialId: 1 });
+  });
+
+  it('regenerates and overwrites the loaded history row', async () => {
+    const original = {
+      material_id: 7,
+      story_text: 'Original {{1}} story.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 7,
+          options: ['delta', 'door', 'dawn', 'desk'],
+          correct_index: 0,
+        },
+      ],
+    };
+    const replacement = {
+      material_id: 7,
+      story_text: 'Replacement {{1}} story.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 7,
+          options: ['delta', 'door', 'dawn', 'desk'],
+          correct_index: 0,
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'recent_practice_words') return [];
+      if (cmd === 'list_story_history') {
+        return [
+          {
+            material_id: 7,
+            title: 'Original Story',
+            created_at: 1_700_000_000_007,
+            read_at: null,
+            blank_count: 1,
+          },
+        ];
+      }
+      if (cmd === 'load_story') return original;
+      if (cmd === 'regenerate_story') return replacement;
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+    await waitFor(() => expect(screen.getByText('Original Story')).toBeDefined());
+
+    const originalButton = screen.getByText('Original Story').closest('button');
+    expect(originalButton).toBeTruthy();
+    fireEvent.click(originalButton!);
+    await waitFor(() => expect(screen.getAllByText(/Original/).length).toBeGreaterThan(1));
+
+    fireEvent.click(screen.getByText(/Regenerate and overwrite/i));
+
+    await waitFor(() => expect(screen.getByText(/Replacement/)).toBeDefined());
+    expect(invokeMock).toHaveBeenCalledWith('regenerate_story', { materialId: 7 });
+  });
+
+  it('Generate new story returns from review to the word picker', async () => {
+    const loaded = {
+      material_id: 8,
+      story_text: 'Loaded {{1}} story.',
+      tiptap_json: '{}',
+      blanks: [
+        {
+          index: 0,
+          target_word_id: 8,
+          options: ['echo', 'edge', 'elm', 'east'],
+          correct_index: 0,
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'recent_practice_words') {
+        return [
+          { id: 8, lemma: 'echo', usageCount: 0, level: 0, firstSeenAt: 0, state: 'learning' },
+        ];
+      }
+      if (cmd === 'list_story_history') {
+        return [
+          {
+            material_id: 8,
+            title: 'Loaded Story',
+            created_at: 1_700_000_000_008,
+            read_at: null,
+            blank_count: 1,
+          },
+        ];
+      }
+      if (cmd === 'load_story') return loaded;
+      throw new Error(`unexpected cmd ${cmd}`);
+    });
+
+    await renderStory();
+    const loadedButton = await screen.findByText('Loaded Story');
+    fireEvent.click(loadedButton.closest('button')!);
+    await waitFor(() => expect(screen.getAllByText(/Loaded/).length).toBeGreaterThan(1));
+
+    fireEvent.click(screen.getByText(/Generate new story/i));
+
+    await waitFor(() => expect(screen.getByText(/Generate story/i)).toBeDefined());
+    expect(screen.getByText('echo')).toBeDefined();
   });
 });

@@ -4,15 +4,16 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useRef, useState } from 'react';
-import { App as AntApp, theme } from 'antd';
+import { theme } from 'antd';
 import {
   WordHighlightExtension,
   wordHighlightPluginKey,
   WORD_HIGHLIGHT_REBUILD,
   type WordHighlightClickPayload,
 } from './WordHighlightExtension';
-import { useWordStore, isLemmaKnown } from '@/app/stores/wordStore';
-import { WordCardPopover } from './WordCardPopover';
+import { useWordStore, isReaderTokenKnown } from '@/app/stores/wordStore';
+import { lemmatize } from '@/app/lib/tokenizer';
+import { WordLookupModal, normalizeLookupQuery } from '@/app/components/dictionary/WordLookupModal';
 
 interface ReaderPaneProps {
   initialContent?: string;
@@ -49,9 +50,8 @@ export function ReaderPane({
   placeholder = 'Paste or type English text here — unknown words will be highlighted as you go.',
   onDrillLemma,
 }: ReaderPaneProps) {
-  const { message } = AntApp.useApp();
   const { token } = theme.useToken();
-  const [popover, setPopover] = useState<WordHighlightClickPayload | null>(null);
+  const [lookup, setLookup] = useState<WordHighlightClickPayload | null>(null);
   const version = useWordStore((s) => s.version);
   const paintBudgetRef = useRef<number>(0);
 
@@ -60,8 +60,8 @@ export function ReaderPane({
       StarterKit,
       Placeholder.configure({ placeholder }),
       WordHighlightExtension.configure({
-        isKnown: isLemmaKnown,
-        onClickUnknown: setPopover,
+        isKnown: isReaderTokenKnown,
+        onClickUnknown: setLookup,
       }),
     ],
     content: initialContent,
@@ -98,8 +98,21 @@ export function ReaderPane({
     };
   }, [editor]);
 
+  const openSelectedWord = () => {
+    const surface = window.getSelection?.()?.toString().trim() ?? '';
+    const normalized = normalizeLookupQuery(surface);
+    if (!normalized) return;
+    setLookup({
+      lemma: lemmatize(normalized),
+      surface,
+      from: 0,
+      to: 0,
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+    });
+  };
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }} onDoubleClick={openSelectedWord}>
       <EditorContent
         editor={editor}
         style={{
@@ -113,24 +126,15 @@ export function ReaderPane({
           fontSize: 15,
         }}
       />
-      {popover && editor && (
-        <WordCardPopover
-          payload={popover}
-          contextSentence={extractSentence(editor.getText(), popover.surface)}
-          onClose={() => setPopover(null)}
-          onMarkKnown={() => {
-            useWordStore.getState().markKnown(popover.lemma);
-            message.success(`Marked "${popover.surface}" as known`);
-            setPopover(null);
-          }}
-          onDrillLemma={
-            onDrillLemma
-              ? () => {
-                  onDrillLemma(popover.lemma);
-                  setPopover(null);
-                }
-              : undefined
-          }
+      {lookup && editor && (
+        <WordLookupModal
+          visible={true}
+          initialQuery={lookup.lemma}
+          surface={lookup.surface}
+          contextSentence={extractSentence(editor.getText(), lookup.surface)}
+          autoSearch={true}
+          onClose={() => setLookup(null)}
+          onShowLinked={onDrillLemma}
         />
       )}
     </div>
