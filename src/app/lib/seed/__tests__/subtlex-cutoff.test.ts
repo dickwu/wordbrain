@@ -58,7 +58,7 @@ describe('Phase 1.5 cutoff acceptance (AC6)', () => {
       // Surface the offending lemmas so future regressions are debuggable.
       const lemmas = [...new Set(unknowns.map((u) => u.lemma))].sort();
       throw new Error(
-        `unknown ratio ${(ratio * 100).toFixed(1)}% > 10%; unknowns: ${JSON.stringify(lemmas)}`,
+        `unknown ratio ${(ratio * 100).toFixed(1)}% > 10%; unknowns: ${JSON.stringify(lemmas)}`
       );
     }
     expect(ratio).toBeLessThanOrEqual(0.1);

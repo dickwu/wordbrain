@@ -22,6 +22,10 @@ pub struct WordRecord {
     pub state_source: Option<String>,
     pub freq_rank: Option<i64>,
     pub exposure_count: i64,
+    /// Learning-loop counter — `MIN(10, usage_count)` is the UX-facing
+    /// "level". Independent of FSRS reps; bumped by every Story / Writing
+    /// register_word_use call.
+    pub usage_count: i64,
     pub marked_known_at: Option<i64>,
     pub user_note: Option<String>,
     pub material_count: i64,
@@ -222,7 +226,7 @@ pub async fn list_words_on_conn(
     let state_placeholders = vec!["?"; state_values.len()].join(", ");
     let mut sql = format!(
         "SELECT w.id, w.lemma, w.state, w.state_source, w.freq_rank, \
-                w.exposure_count, w.marked_known_at, w.user_note, \
+                w.exposure_count, w.usage_count, w.marked_known_at, w.user_note, \
                 (SELECT COUNT(*) FROM word_materials wm WHERE wm.word_id = w.id) AS material_count \
            FROM words w \
           WHERE w.state IN ({state_placeholders})"
@@ -253,9 +257,10 @@ pub async fn list_words_on_conn(
             state_source: row.get::<Option<String>>(3)?,
             freq_rank: row.get::<Option<i64>>(4)?,
             exposure_count: row.get::<i64>(5)?,
-            marked_known_at: row.get::<Option<i64>>(6)?,
-            user_note: row.get::<Option<String>>(7)?,
-            material_count: row.get::<i64>(8)?,
+            usage_count: row.get::<i64>(6)?,
+            marked_known_at: row.get::<Option<i64>>(7)?,
+            user_note: row.get::<Option<String>>(8)?,
+            material_count: row.get::<i64>(9)?,
         });
     }
     Ok(out)

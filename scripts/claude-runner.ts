@@ -42,7 +42,10 @@ function resolveClaudeBin(): string {
   }
 
   const r = spawnSync('/bin/bash', ['-lc', 'command -v claude'], { encoding: 'utf8' });
-  const line = (r.stdout ?? '').split('\n').find((x) => x.trim().length > 0)?.trim();
+  const line = (r.stdout ?? '')
+    .split('\n')
+    .find((x) => x.trim().length > 0)
+    ?.trim();
   if (line && line.length > 0 && !line.includes('/node_modules/')) return line;
 
   return 'claude';
@@ -198,9 +201,7 @@ export async function runClaudeParallel(jobs: ClaudeRunOptions[]): Promise<Claud
 export function formatResult(r: ClaudeRunResult): string {
   const cost = r.parsed?.total_cost_usd;
   const tokens = r.parsed?.usage;
-  const totalTokens = tokens
-    ? (tokens.input_tokens ?? 0) + (tokens.output_tokens ?? 0)
-    : 0;
+  const totalTokens = tokens ? (tokens.input_tokens ?? 0) + (tokens.output_tokens ?? 0) : 0;
   return [
     r.ok ? 'OK ' : 'FAIL',
     `exit=${r.exitCode}`,

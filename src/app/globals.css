@@ -51,3 +51,41 @@ html.dark .wb-word--learning {
 html.dark .wb-word--unknown {
   background: rgba(129, 140, 248, 0.22);
 }
+
+/* Synonym bracket span — Writing Train rewrite renderer */
+.wb-synonym-span {
+  background: rgba(16, 185, 129, 0.16);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0 2px;
+  color: #047857;
+  font-style: italic;
+}
+
+html.dark .wb-synonym-span {
+  background: rgba(52, 211, 153, 0.22);
+  color: #6ee7b7;
+}
+
+/* Diff render */
+.wb-diff-insert {
+  background: rgba(34, 197, 94, 0.18);
+  color: #166534;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+html.dark .wb-diff-insert {
+  background: rgba(74, 222, 128, 0.22);
+  color: #bbf7d0;
+}
+.wb-diff-delete {
+  background: rgba(248, 113, 113, 0.16);
+  color: #991b1b;
+  text-decoration: line-through;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+html.dark .wb-diff-delete {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fecaca;
+}

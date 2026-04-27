@@ -44,7 +44,10 @@ export function stripSrt(raw: string): string {
   }
 
   // Collapse runs of blank lines to at most one blank, trim the tails.
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function isNextNonEmptyTimestamp(lines: string[], from: number): boolean {
@@ -58,7 +61,5 @@ function isNextNonEmptyTimestamp(lines: string[], from: number): boolean {
 
 /** Quick check used by the importer to route `.srt` files through [`stripSrt`]. */
 export function looksLikeSrt(raw: string): boolean {
-  return /^\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/m.test(
-    raw.slice(0, 4096)
-  );
+  return /^\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/m.test(raw.slice(0, 4096));
 }

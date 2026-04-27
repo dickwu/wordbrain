@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { isTauri, markKnownIpc, unmarkKnownIpc } from '@/app/lib/ipc';
 import { useWordStore } from '@/app/stores/wordStore';
+import { useUsageStore } from '@/app/stores/usageStore';
 import { bulkUnmarkWords, listWords, setUserNote, setWordState } from './api';
 import type { ListWordsFilter, WordRecord } from './types';
 
@@ -9,7 +10,15 @@ const WORDS_ROOT_KEY = ['words'] as const;
 export function useWordsQuery(filter: ListWordsFilter): UseQueryResult<WordRecord[]> {
   return useQuery<WordRecord[]>({
     queryKey: [...WORDS_ROOT_KEY, filter],
-    queryFn: async () => (isTauri() ? listWords(filter) : []),
+    queryFn: async () => {
+      if (!isTauri()) return [];
+      const rows = await listWords(filter);
+      // Mirror server-confirmed usage_count into the usageStore so the
+      // Story / Writing sidebars (and the Level column itself) render in
+      // O(1) without a second IPC round-trip.
+      useUsageStore.getState().setMany(rows.map((r) => [r.id, r.usageCount] as const));
+      return rows;
+    },
     staleTime: 30_000,
   });
 }

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { getSetting, setSetting, isTauri } from '@/app/lib/ipc';
 
 const AUTO_UPDATE_KEY = 'phase9.auto_update_enabled';
+const HTTP_FALLBACK_KEY = 'learn_loop.http_fallback_enabled';
 
 interface SettingsState {
   /** True while the store is still reading persisted values from IPC. */
@@ -11,6 +12,11 @@ interface SettingsState {
    * regardless of this flag. */
   autoUpdateEnabled: boolean;
   setAutoUpdate: (v: boolean) => Promise<void>;
+  /** When true, AI calls fall back to the HTTP `lookup_ai` path after both
+   * CLI channels (`claude -p`, `codex exec`) fail. Off by default — the
+   * learning loop is meant to stay local-first. */
+  httpFallbackEnabled: boolean;
+  setHttpFallback: (v: boolean) => Promise<void>;
   /** Read the persisted values from SQLite via IPC. Safe to call multiple times. */
   hydrate: () => Promise<void>;
 }
@@ -18,6 +24,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set) => ({
   loading: true,
   autoUpdateEnabled: true,
+  httpFallbackEnabled: false,
   setAutoUpdate: async (v) => {
     set({ autoUpdateEnabled: v });
     if (isTauri()) {
@@ -28,22 +35,36 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       }
     }
   },
+  setHttpFallback: async (v) => {
+    set({ httpFallbackEnabled: v });
+    if (isTauri()) {
+      try {
+        await setSetting(HTTP_FALLBACK_KEY, v);
+      } catch (err) {
+        console.error('[wordbrain] persist http-fallback setting failed', err);
+      }
+    }
+  },
   hydrate: async () => {
     if (!isTauri()) {
       set({ loading: false });
       return;
     }
     try {
-      const raw = await getSetting(AUTO_UPDATE_KEY);
-      if (raw === null || raw === undefined) {
-        set({ loading: false });
-        return;
+      const [autoRaw, httpRaw] = await Promise.all([
+        getSetting(AUTO_UPDATE_KEY),
+        getSetting(HTTP_FALLBACK_KEY),
+      ]);
+      const next: Partial<SettingsState> = { loading: false };
+      if (autoRaw !== null && autoRaw !== undefined) {
+        const parsed = JSON.parse(autoRaw);
+        if (typeof parsed === 'boolean') next.autoUpdateEnabled = parsed;
       }
-      const parsed = JSON.parse(raw);
-      set({
-        autoUpdateEnabled: typeof parsed === 'boolean' ? parsed : true,
-        loading: false,
-      });
+      if (httpRaw !== null && httpRaw !== undefined) {
+        const parsed = JSON.parse(httpRaw);
+        if (typeof parsed === 'boolean') next.httpFallbackEnabled = parsed;
+      }
+      set(next);
     } catch (err) {
       console.warn('[wordbrain] settings hydrate skipped', err);
       set({ loading: false });

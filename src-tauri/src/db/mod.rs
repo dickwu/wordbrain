@@ -23,7 +23,10 @@ pub mod network;
 pub mod schema;
 pub mod settings;
 pub mod srs;
+pub mod story;
+pub mod usage;
 pub mod words;
+pub mod writing;
 
 pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

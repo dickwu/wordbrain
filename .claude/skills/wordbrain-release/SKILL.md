@@ -24,27 +24,27 @@ plus an auto-updated Homebrew cask in ~10–15 minutes when nothing is broken.
 
 ## Project facts (memorise these)
 
-| Fact | Value |
-|------|-------|
-| Repo | `dickwu/wordbrain` (the `lifefarmer/*` namespace is **only** the macOS bundle id) |
-| Bundle id | `com.lifefarmer.wordbrain` (kept for compatibility with the user's other apps) |
-| Publish script | `scripts/publish.sh` (NOT `./publish.sh` — it lives under `scripts/`) |
-| Release workflow | `.github/workflows/release.yml` — fires on tag `v*` |
-| Homebrew workflow | `.github/workflows/homebrew.yml` — fires on `workflow_run` watching `release.yml` (**not** `release: published`, which is blocked by GitHub for `GITHUB_TOKEN`-created releases — see trap #11) |
-| Tap repo | `dickwu/homebrew-tap` (shared with the r2 project; cask file is `Casks/wordbrain.rb`) |
-| Brew install | `brew install dickwu/tap/wordbrain` |
-| Updater endpoint | `https://github.com/dickwu/wordbrain/releases/latest/download/latest.json` (configured in `src-tauri/tauri.conf.json` — verify this any time the GH owner is touched) |
-| Updater pubkey | committed at `src-tauri/tauri.conf.json` `plugins.updater.pubkey` |
-| Updater private key | `.omc/updater/wordbrain.key` (gitignored, never commit) |
+| Fact                | Value                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo                | `dickwu/wordbrain` (the `lifefarmer/*` namespace is **only** the macOS bundle id)                                                                                                               |
+| Bundle id           | `com.lifefarmer.wordbrain` (kept for compatibility with the user's other apps)                                                                                                                  |
+| Publish script      | `scripts/publish.sh` (NOT `./publish.sh` — it lives under `scripts/`)                                                                                                                           |
+| Release workflow    | `.github/workflows/release.yml` — fires on tag `v*`                                                                                                                                             |
+| Homebrew workflow   | `.github/workflows/homebrew.yml` — fires on `workflow_run` watching `release.yml` (**not** `release: published`, which is blocked by GitHub for `GITHUB_TOKEN`-created releases — see trap #11) |
+| Tap repo            | `dickwu/homebrew-tap` (shared with the r2 project; cask file is `Casks/wordbrain.rb`)                                                                                                           |
+| Brew install        | `brew install dickwu/tap/wordbrain`                                                                                                                                                             |
+| Updater endpoint    | `https://github.com/dickwu/wordbrain/releases/latest/download/latest.json` (configured in `src-tauri/tauri.conf.json` — verify this any time the GH owner is touched)                           |
+| Updater pubkey      | committed at `src-tauri/tauri.conf.json` `plugins.updater.pubkey`                                                                                                                               |
+| Updater private key | `.omc/updater/wordbrain.key` (gitignored, never commit)                                                                                                                                         |
 
 ## Required GitHub secrets
 
-| Secret | Purpose | Format |
-|--------|---------|--------|
-| `TAURI_SIGNING_PRIVATE_KEY` | Signs `latest.json` artifacts so the updater verifies them | **Raw text content of `.omc/updater/wordbrain.key`** — including the leading `untrusted comment: …` line. **NOT** base64-encoded. The publish.sh header used to say "store base64" but that's wrong; Tauri's signer parses the raw minisign format and rejects base64 with `Missing comment in secret key`. |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the encrypted key (or empty string) | If you generated with `bunx tauri signer generate -w …` and accepted the empty password, set this secret to an empty string explicitly — leaving it unset behaves differently than setting it to `""`. |
-| `HOMEBREW_TAP_TOKEN` | PAT used by `homebrew.yml` to push to the tap repo | Fine-grained PAT scoped to `dickwu/homebrew-tap` only, **Contents: Read and write**. |
-| `APPLE_*` (optional) | macOS notarization (`APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE_PASSWORD`) | Skips the Gatekeeper warning. Without these the build still succeeds but users see a "downloaded from Internet" prompt. **Do NOT** wire empty `APPLE_*` env vars into `release.yml` — Tauri's signer treats empty strings as "try to use the keychain" and fails with `failed to import keychain certificate`. Either set the secrets to real values or omit the env block entirely (current state). |
+| Secret                               | Purpose                                                                                                                                         | Format                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Signs `latest.json` artifacts so the updater verifies them                                                                                      | **Raw text content of `.omc/updater/wordbrain.key`** — including the leading `untrusted comment: …` line. **NOT** base64-encoded. The publish.sh header used to say "store base64" but that's wrong; Tauri's signer parses the raw minisign format and rejects base64 with `Missing comment in secret key`.                                                                                          |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the encrypted key (or empty string)                                                                                                | If you generated with `bunx tauri signer generate -w …` and accepted the empty password, set this secret to an empty string explicitly — leaving it unset behaves differently than setting it to `""`.                                                                                                                                                                                               |
+| `HOMEBREW_TAP_TOKEN`                 | PAT used by `homebrew.yml` to push to the tap repo                                                                                              | Fine-grained PAT scoped to `dickwu/homebrew-tap` only, **Contents: Read and write**.                                                                                                                                                                                                                                                                                                                 |
+| `APPLE_*` (optional)                 | macOS notarization (`APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE_PASSWORD`) | Skips the Gatekeeper warning. Without these the build still succeeds but users see a "downloaded from Internet" prompt. **Do NOT** wire empty `APPLE_*` env vars into `release.yml` — Tauri's signer treats empty strings as "try to use the keychain" and fails with `failed to import keychain certificate`. Either set the secrets to real values or omit the env block entirely (current state). |
 
 ### Quick path: bootstrapping `HOMEBREW_TAP_TOKEN`
 
@@ -117,6 +117,7 @@ Tauri triple-matrix builds usually run **10–15 minutes**. The macOS leg is
 the longest because it builds both arm64 and x64 then `lipo`s them.
 
 When green, two further runs typically appear:
+
 - `homebrew.yml` (release-published trigger) — usually <30 s
 - `release.yml`'s `publish` job — collects artifacts and creates the GH release
 
@@ -127,6 +128,7 @@ gh release view v<version> --json assets --jq '.assets[].name'
 ```
 
 You should see (rough names):
+
 - `WordBrain_<version>_universal.dmg`
 - `WordBrain_<version>_universal.app.tar.gz` + `.sig`
 - `WordBrain_<version>_x64_en-US.msi` + `.msi.zip` + `.msi.zip.sig`
@@ -154,6 +156,7 @@ Already wired in `release.yml` (Apr 2026) — don't revert.
 ### 2. `error: failed to run custom build command for libspa-sys` on Linux
 
 PipeWire dev headers missing. Fix is two-pronged:
+
 - `release.yml` apt-installs `libpipewire-0.3-dev` (belt).
 - `tauri-plugin-connector` is now an optional `dev-connector` feature so
   release builds don't compile xcap → libspa at all (suspenders).
@@ -226,6 +229,7 @@ incorrectly suggested), re-store it as raw text instead.
 `dev-connector` feature is off).
 
 Fix paths:
+
 - In CI release: `release.yml` has a `Remove dev-only capabilities` step
   that `rm -f`s the file before `tauri build`. Verify it's still there.
 - Locally with `cargo check` (no features): expected. Use
@@ -289,10 +293,9 @@ permissions:
   contents: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
-jobs:
-  ...
+jobs: ...
 ```
 
 Already wired on both `release.yml` and `homebrew.yml`. Drop the env var
@@ -391,15 +394,19 @@ boilerplate.
 ## What's Changed
 
 ### New Features
+
 - <one-line description per feat commit>
 
 ### Bug Fixes
+
 - <one-line description per fix commit>
 
 ### Improvements
+
 - <refactor / perf bullets>
 
 ### Maintenance
+
 - <chore / ci / docs bullets — keep short>
 
 ## Install

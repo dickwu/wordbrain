@@ -16,6 +16,8 @@ import {
   BookOutlined,
   BulbFilled,
   BulbOutlined,
+  EditOutlined,
+  FileTextOutlined,
   PlusOutlined,
   ProfileOutlined,
   ReadOutlined,
@@ -30,6 +32,7 @@ import {
   type ImportedFile,
 } from '@/app/components/reader/MaterialImportModal';
 import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
+import { AiPanel } from '@/app/components/settings/AiPanel';
 import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
 import { DictionarySettingsPanel } from '@/app/components/settings/DictionarySettingsPanel';
 import { GeneralSettingsPanel } from '@/app/components/settings/GeneralSettingsPanel';
@@ -41,6 +44,11 @@ import { NetworkView } from '@/app/components/network/NetworkView';
 import { WordsView } from '@/app/components/words/WordsView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
 import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
+import { StoryView } from '@/app/components/story/StoryView';
+import { StoryUnreadBadge } from '@/app/components/story/StoryUnreadBadge';
+import { WritingView } from '@/app/components/writing/WritingView';
+import { useUsageStore } from '@/app/stores/usageStore';
+import { recentPracticeWordsIpc } from '@/app/lib/ipc';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
 import { useSettingsStore } from '@/app/stores/settingsStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
@@ -67,7 +75,7 @@ const { Title, Paragraph, Text } = Typography;
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode = 'reader' | 'library' | 'review' | 'network' | 'words';
+type ViewMode = 'reader' | 'library' | 'review' | 'story' | 'writing' | 'network' | 'words';
 
 export default function Home() {
   const { message } = AntApp.useApp();
@@ -447,6 +455,22 @@ export default function Home() {
               onClick={() => setView('review')}
             />
           </DueQueueBadge>
+          <StoryUnreadBadge>
+            <SidebarEntry
+              icon={<FileTextOutlined />}
+              label="Story"
+              active={view === 'story'}
+              onClick={() => setView('story')}
+            />
+          </StoryUnreadBadge>
+          <WritingSidebarTooltip>
+            <SidebarEntry
+              icon={<EditOutlined />}
+              label="Writing"
+              active={view === 'writing'}
+              onClick={() => setView('writing')}
+            />
+          </WritingSidebarTooltip>
           <SidebarEntry
             icon={<ProfileOutlined />}
             label="Words"
@@ -514,6 +538,10 @@ export default function Home() {
             />
           ) : view === 'review' ? (
             <ReviewSession />
+          ) : view === 'story' ? (
+            <StoryView />
+          ) : view === 'writing' ? (
+            <WritingView />
           ) : view === 'network' ? (
             <NetworkView
               refreshKey={libraryRefresh}
@@ -551,6 +579,7 @@ export default function Home() {
         <Space orientation="vertical" style={{ width: '100%' }} size={12}>
           <GeneralSettingsPanel />
           <DictionarySettingsPanel />
+          <AiPanel />
           <ApiKeysPanel />
         </Space>
       </Drawer>
@@ -652,6 +681,44 @@ function safeParseTiptap(raw: string): unknown | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Sidebar wrapper for the Writing entry — shows the lowest-level recent word
+ * as a tooltip ("next: trepidation (lvl 1)") so the user knows what they would
+ * be practising before they click in.
+ */
+function WritingSidebarTooltip({ children }: { children: React.ReactNode }) {
+  const [hint, setHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isTauri()) return;
+      try {
+        const rows = await recentPracticeWordsIpc(14, 50);
+        if (cancelled || rows.length === 0) {
+          setHint(null);
+          return;
+        }
+        const lowest = rows[0];
+        setHint(`next: ${lowest.lemma} (lvl ${lowest.level})`);
+        useUsageStore.getState().setMany(rows.map((r) => [r.id, r.usageCount] as const));
+      } catch {
+        if (!cancelled) setHint(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!hint) return <>{children}</>;
+  return (
+    <Tooltip placement="right" title={hint}>
+      <span style={{ display: 'block' }}>{children}</span>
+    </Tooltip>
+  );
 }
 
 function SidebarEntry({

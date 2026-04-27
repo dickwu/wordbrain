@@ -51,6 +51,7 @@ open -a WordBrain
 ```
 
 Expected behaviour:
+
 1. On launch, WordBrain fetches `http://localhost:8787/latest.json`.
 2. The updater plugin validates the signature against the pubkey in
    `tauri.conf.json`.
@@ -64,11 +65,11 @@ If the signature check fails the updater silently ignores the upgrade — check
 
 The release workflow runs the same `bun run tauri build` on:
 
-| OS               | bundles            | runner           |
-|------------------|--------------------|------------------|
-| macOS-latest     | `app,dmg,updater`  | universal-apple  |
-| Ubuntu-22.04     | `deb,appimage,updater` | x86_64 linux |
-| Windows-latest   | `msi,updater`      | x86_64 MSVC      |
+| OS             | bundles                | runner          |
+| -------------- | ---------------------- | --------------- |
+| macOS-latest   | `app,dmg,updater`      | universal-apple |
+| Ubuntu-22.04   | `deb,appimage,updater` | x86_64 linux    |
+| Windows-latest | `msi,updater`          | x86_64 MSVC     |
 
 All three must be green before `publish` uploads artifacts + `latest.json` to
 the tagged GitHub Release.

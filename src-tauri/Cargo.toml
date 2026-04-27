@@ -41,6 +41,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 quick-xml = "0.36"
 mdict-rs = "0.1.4"
 wordbrain-resource-manager = { path = "crates/resource-manager" }
+# AI provider chain (ai/cli_provider.rs, ai/chain.rs)
+thiserror = "1"
+tempfile = "3"
+which = "6"
 
 # tauri-plugin-connector ships dev-only instrumentation (screen capture + R2
 # upload of snapshots) that pulls xcap → libspa/pipewire (Linux) and

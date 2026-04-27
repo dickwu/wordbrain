@@ -311,3 +311,120 @@ export async function clusterForWord(
     maxPerHop,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Learning-loop telemetry — mirrors `src-tauri/src/commands/usage.rs`.
+// Both surfaces (Story Review + Writing Train) call `registerWordUseIpc` on
+// every "use" event; the result is the post-increment `usage_count` value
+// (cap to derive level 0–10 in the UI).
+// ---------------------------------------------------------------------------
+
+export type UsageSurface = 'story_review' | 'writing_train';
+
+export interface RecentWordIpc {
+  id: number;
+  lemma: string;
+  usageCount: number;
+  level: number;
+  firstSeenAt: number | null;
+  state: WordState;
+}
+
+export async function registerWordUseIpc(wordId: number, surface: UsageSurface): Promise<number> {
+  return invoke<number>('register_word_use', { wordId, surface });
+}
+
+export async function recentPracticeWordsIpc(
+  windowDays: number,
+  limit: number
+): Promise<RecentWordIpc[]> {
+  return invoke<RecentWordIpc[]>('recent_practice_words', { windowDays, limit });
+}
+
+// ---------------------------------------------------------------------------
+// Story Review — mirrors `src-tauri/src/commands/story.rs`.
+// `generate_story` persists an `ai_story` material + cloze MCQ payload and
+// returns the renderable story shape; `generate_mcq_explanation` returns a
+// known-words-only paragraph for wrong-answer feedback.
+// ---------------------------------------------------------------------------
+
+export interface ClozeBlankIpc {
+  /** 0-based index in story.story_text placeholders. */
+  index: number;
+  /** word_id of the lemma the blank was created for. */
+  target_word_id: number;
+  /** 4 MCQ options; one is the correct word, three are distractors. */
+  options: string[];
+  /** Position in `options` of the correct answer. */
+  correct_index: number;
+}
+
+export interface StoryMaterialIpc {
+  material_id: number;
+  /** Body with `{{1}}`, `{{2}}`, ... placeholders for each blank. */
+  story_text: string;
+  /** Tiptap doc JSON (also persisted on the materials row). */
+  tiptap_json: string;
+  blanks: ClozeBlankIpc[];
+}
+
+export async function generateStory(wordIds: number[]): Promise<StoryMaterialIpc> {
+  return invoke<StoryMaterialIpc>('generate_story', { wordIds });
+}
+
+export async function generateMcqExplanation(
+  wordId: number,
+  wrongAnswerText: string,
+  correctAnswerText: string,
+  knownLemmas: string[]
+): Promise<string> {
+  return invoke<string>('generate_mcq_explanation', {
+    wordId,
+    wrongAnswerText,
+    correctAnswerText,
+    knownLemmas,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Writing Train — mirrors `src-tauri/src/commands/writing.rs`.
+// `submit_writing` grades the learner's sentence with the AI chain, persists
+// the submission as a `materials` row with `source_kind='writing_submission'`,
+// upserts edges in `word_materials`, and fires +1 on `usage_count` for the
+// target word and any other recent-list lemmas the learner used.
+// ---------------------------------------------------------------------------
+
+export type WritingUsageVerdict = 'correct' | 'incorrect' | 'ambiguous';
+
+export interface WritingDiffSpan {
+  from: number;
+  to: number;
+  kind: 'insert' | 'delete' | 'equal';
+  text: string;
+}
+
+export interface WritingSynonymSpan {
+  from: number;
+  to: number;
+  synonyms: string[];
+}
+
+export interface WritingFeedbackIpc {
+  material_id: number;
+  corrected_text: string;
+  diff_spans: WritingDiffSpan[];
+  usage_verdict: WritingUsageVerdict;
+  usage_explanation: string;
+  synonym_spans: WritingSynonymSpan[];
+  new_usage_count: number;
+}
+
+export interface SubmitWritingInput {
+  target_word_id: number;
+  raw_text: string;
+  tiptap_json: string;
+}
+
+export async function submitWriting(input: SubmitWritingInput): Promise<WritingFeedbackIpc> {
+  return invoke<WritingFeedbackIpc>('submit_writing', { input });
+}

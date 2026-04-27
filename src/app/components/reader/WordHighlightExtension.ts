@@ -23,7 +23,10 @@ export const wordHighlightPluginKey = new PluginKey<DecorationSet>('wordHighligh
 /** Rebuild-signal: dispatch `tr.setMeta(wordHighlightPluginKey, REBUILD)` after marking known. */
 export const WORD_HIGHLIGHT_REBUILD = 'rebuild';
 
-function buildDecorations(doc: ProseMirrorNode, isKnown: (lemma: string) => boolean): DecorationSet {
+function buildDecorations(
+  doc: ProseMirrorNode,
+  isKnown: (lemma: string) => boolean
+): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (!node.isText || !node.text) return;
@@ -37,8 +40,8 @@ function buildDecorations(doc: ProseMirrorNode, isKnown: (lemma: string) => bool
           from,
           to,
           { class: 'wb-word wb-word--unknown', 'data-lemma': t.lemma, 'data-surface': t.surface },
-          { lemma: t.lemma, surface: t.surface },
-        ),
+          { lemma: t.lemma, surface: t.surface }
+        )
       );
     }
   });

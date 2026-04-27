@@ -7,7 +7,10 @@ pub mod materials;
 pub mod network;
 pub mod settings;
 pub mod srs;
+pub mod story;
+pub mod usage;
 pub mod words;
+pub mod writing;
 
 #[tauri::command]
 pub fn ping() -> &'static str {

@@ -1,9 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "dev-connector",
-  "description": "Permissions for the tauri-plugin-connector dev tooling. This capability file is removed by .github/workflows/release.yml before release builds (which use --no-default-features and therefore do not register the connector plugin).",
+  "description": "Permissions for the tauri-plugin-connector dev tooling. Lives outside `capabilities/` so tauri-build's default `./capabilities/**/*` glob does NOT auto-load it. Registered at runtime via `app.add_capability(include_str!(...))` in `src/lib.rs`, gated on `cfg(feature = \"dev-connector\")`. Plain `tauri dev` / `tauri build` skip the feature, so neither the plugin nor this capability are loaded — release builds no longer need to delete this file.",
   "windows": ["main"],
-  "permissions": [
-    "connector:default"
-  ]
+  "permissions": ["connector:default"]
 }

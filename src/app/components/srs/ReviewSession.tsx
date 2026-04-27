@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Button, Card, Empty, Space, Spin, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import {
-  applySrsRating,
-  listDueSrs,
-  type DueCardIpc,
-  isTauri,
-} from '@/app/lib/ipc';
+import { applySrsRating, listDueSrs, type DueCardIpc, isTauri } from '@/app/lib/ipc';
 import { RATING_CODE, RATING_LABEL, schedule, type SrsRating } from '@/app/lib/srs';
 import { useWordStore } from '@/app/stores/wordStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
@@ -133,9 +128,7 @@ export function ReviewSession() {
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
-            <span>
-              No cards due right now. Come back later or add new words from the reader.
-            </span>
+            <span>No cards due right now. Come back later or add new words from the reader.</span>
           }
         />
       );
@@ -228,7 +221,19 @@ export function ReviewSession() {
         )}
       </Card>
     );
-  }, [phase, current, index, queue.length, revealed, gloss, submitting, reviewedCount, graduatedCount, loadQueue, onRate]);
+  }, [
+    phase,
+    current,
+    index,
+    queue.length,
+    revealed,
+    gloss,
+    submitting,
+    reviewedCount,
+    graduatedCount,
+    loadQueue,
+    onRate,
+  ]);
 
   return (
     <div>

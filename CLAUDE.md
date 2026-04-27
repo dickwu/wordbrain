@@ -5,7 +5,8 @@ Guidance for Claude Code working in this repo.
 ## Project
 
 **WordBrain** — local-first English vocabulary builder. Tauri v2 + Next.js 16 + React 19 + Tiptap 3
-+ Turso SQLite. English tokenization with Chinese glosses. Single-user, cross-platform desktop app.
+
+- Turso SQLite. English tokenization with Chinese glosses. Single-user, cross-platform desktop app.
 
 Canonical plan: `.omc/plans/wordbrain-v1.md`. Acceptance criteria: `.omc/prd.json`.
 
@@ -40,7 +41,7 @@ cargo test               # Backend tests
   1. Bundled ECDICT (offline, primary)
   2. Youdao / DeepL (online, cached in `word_translations_cache`)
   3. AI on-demand gloss (Ollama / OpenAI / Anthropic)
-  API keys encrypted at rest via `tauri-plugin-stronghold`; never sent to renderer.
+     API keys encrypted at rest via `tauri-plugin-stronghold`; never sent to renderer.
 
 ## Conventions
 

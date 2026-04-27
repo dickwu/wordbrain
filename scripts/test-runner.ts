@@ -8,7 +8,9 @@ const MARKER = 'WORDBRAIN-RUNNER-OK';
 
 async function main(): Promise<void> {
   console.log(`[test] CLAUDE_BIN = ${CLAUDE_BIN}`);
-  console.log(`[test] asking opus (xhigh effort) to output "${MARKER}" via --print --output-format json`);
+  console.log(
+    `[test] asking opus (xhigh effort) to output "${MARKER}" via --print --output-format json`
+  );
 
   const result = await runClaude({
     prompt: `Respond with exactly this single token and nothing else: ${MARKER}`,
@@ -34,8 +36,8 @@ async function main(): Promise<void> {
         result_preview: result.parsed?.result?.slice(0, 200),
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 
   if (result.parsed?.result?.includes(MARKER)) {

@@ -3,11 +3,11 @@ name: release
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build (e.g. v0.1.0)"
+        description: 'Tag to build (e.g. v0.1.0)'
         required: true
 
 permissions:
@@ -17,7 +17,7 @@ permissions:
 # onto Node 24 ahead of the June 2 2026 forced cutover. Removes the deprecation
 # warning and lets us drop the env var when v5+ majors land.
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   build:
@@ -31,11 +31,11 @@ jobs:
             bundles: app,dmg,updater
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: ""
+            args: ''
             bundles: deb,appimage,updater
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            args: ""
+            args: ''
             bundles: msi,updater
 
     runs-on: ${{ matrix.os }}
@@ -74,13 +74,12 @@ jobs:
       - name: Install JS deps
         run: bun install --frozen-lockfile
 
-      # Drop the dev-connector capability file — the connector plugin is
-      # behind the `dev-connector` cargo feature, which `--no-default-features`
-      # disables. If the capability file stayed, tauri-build would fail with
-      # "Permission connector:default not found".
-      - name: Remove dev-only capabilities
-        shell: bash
-        run: rm -f src-tauri/capabilities/dev-connector.json
+      # The dev-connector capability lives in `src-tauri/capabilities-dev/`
+      # (outside tauri-build's default `./capabilities/**/*` auto-load glob)
+      # and is registered at runtime via `app.add_capability(...)` in
+      # `src/lib.rs` only when the `dev-connector` feature is on. Release
+      # builds use `--no-default-features` (no `dev-connector`), so neither
+      # the plugin nor the capability are loaded — no manual cleanup needed.
 
       # Force bash so `$TAURI_ARGS` expands correctly on Windows (default
       # PowerShell reads `$VAR` as PowerShell syntax, not env-var expansion).

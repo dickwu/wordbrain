@@ -1,23 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  Card,
-  Form,
-  Input,
-  Button,
-  Space,
-  Tag,
-  Typography,
-  Alert,
-  App as AntApp,
-} from 'antd';
+import { Card, Form, Input, Button, Space, Tag, Typography, Alert, App as AntApp } from 'antd';
 import { KeyOutlined, DeleteOutlined, CheckCircleTwoTone } from '@ant-design/icons';
-import {
-  saveApiKey,
-  hasApiKey,
-  listConfiguredProviders,
-} from '@/app/lib/dict';
+import { saveApiKey, hasApiKey, listConfiguredProviders } from '@/app/lib/dict';
 import { isTauri } from '@/app/lib/ipc';
 
 const { Paragraph, Text } = Typography;
@@ -114,11 +100,17 @@ export function ApiKeysPanel() {
   };
 
   return (
-    <Card title={<span><KeyOutlined /> BYOK — API Keys</span>} size="small">
+    <Card
+      title={
+        <span>
+          <KeyOutlined /> BYOK — API Keys
+        </span>
+      }
+      size="small"
+    >
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Keys are encrypted at rest via tauri-plugin-stronghold and never leave
-        the Rust backend after saving. Clear the slot by saving an empty
-        value.
+        Keys are encrypted at rest via tauri-plugin-stronghold and never leave the Rust backend
+        after saving. Clear the slot by saving an empty value.
       </Paragraph>
       {!isTauri() && (
         <Alert

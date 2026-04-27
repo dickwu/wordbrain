@@ -117,12 +117,7 @@ export function WordCardPopover({
         <Button type="primary" size="small" icon={<CheckOutlined />} onClick={onMarkKnown}>
           Mark known
         </Button>
-        <Button
-          size="small"
-          icon={<PlusOutlined />}
-          loading={addingToSrs}
-          onClick={handleAddToSrs}
-        >
+        <Button size="small" icon={<PlusOutlined />} loading={addingToSrs} onClick={handleAddToSrs}>
           Add to SRS
         </Button>
         {onDrillLemma && (

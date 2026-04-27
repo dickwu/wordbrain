@@ -1,3 +1,4 @@
+pub mod ai;
 mod commands;
 // `pub` so integration tests under `src-tauri/tests/` can exercise the schema
 // and the `*_on_conn` query helpers directly against a real file-backed DB.
@@ -7,6 +8,10 @@ pub mod parsers;
 
 use crate::keys::KeyVault;
 use tauri::Manager;
+
+#[cfg(feature = "dev-connector")]
+const DEV_CONNECTOR_CAPABILITY: &str =
+    include_str!("../capabilities-dev/dev-connector.json");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,11 +30,23 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            // Register the connector capability at runtime, paired with the
+            // plugin above, so a plain `tauri dev` (without --features
+            // dev-connector) does NOT need any dev-only capability JSON in
+            // `capabilities/` — avoids "Permission connector:default not found".
+            #[cfg(feature = "dev-connector")]
+            app.add_capability(DEV_CONNECTOR_CAPABILITY)
+                .map_err(|e| format!("dev-connector capability: {e}"))?;
+
             let handle = app.handle().clone();
             // Initialise the BYOK stronghold vault synchronously so state is
             // available to the first command that needs a key.
             let vault = KeyVault::init(&handle).map_err(|e| format!("stronghold vault: {e}"))?;
             handle.manage(vault);
+
+            // Detect claude-p / codex-cli availability once so the Settings
+            // panel can render ✅/❌ without a startup race.
+            ai::chain::warm_provider_cache();
 
             let handle_db = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -80,6 +97,12 @@ pub fn run() {
             commands::srs::apply_srs_rating,
             commands::network::build_network,
             commands::network::cluster_for_word,
+            commands::usage::register_word_use,
+            commands::usage::recent_practice_words,
+            commands::story::generate_story,
+            commands::story::generate_mcq_explanation,
+            commands::writing::submit_writing,
+            ai::chain::ai_provider_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running WordBrain");

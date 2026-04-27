@@ -94,19 +94,19 @@ from Settings → Dictionary for a plain-text dump. WordBrain never phones home.
 
 ## Tech stack
 
-| Layer          | Choice                                                                 |
-|----------------|------------------------------------------------------------------------|
-| Desktop shell  | Tauri v2 (Rust)                                                         |
-| Frontend       | Next.js 16 (static export), React 19, Ant Design 6, Tailwind CSS 4     |
-| Editor         | Tiptap 3 + a custom ProseMirror decoration extension                    |
-| State          | Zustand (sync) + TanStack React Query (async IPC)                       |
-| Database       | Turso SQLite (Rust-native, embedded)                                    |
-| Tokenizer      | `wink-lemmatizer` (runs in the renderer, no IPC round-trip)             |
-| Dictionary     | ECDICT (offline) · Youdao / DeepL (online) · Ollama / OpenAI / Anthropic |
-| Spaced rep     | `ts-fsrs`                                                               |
-| Graph          | cytoscape + `react-cytoscapejs` + `cytoscape-fcose`                     |
-| Secrets        | `tauri-plugin-stronghold`                                               |
-| Auto-update    | `tauri-plugin-updater` (signed `latest.json` from GitHub Releases)      |
+| Layer         | Choice                                                                   |
+| ------------- | ------------------------------------------------------------------------ |
+| Desktop shell | Tauri v2 (Rust)                                                          |
+| Frontend      | Next.js 16 (static export), React 19, Ant Design 6, Tailwind CSS 4       |
+| Editor        | Tiptap 3 + a custom ProseMirror decoration extension                     |
+| State         | Zustand (sync) + TanStack React Query (async IPC)                        |
+| Database      | Turso SQLite (Rust-native, embedded)                                     |
+| Tokenizer     | `wink-lemmatizer` (runs in the renderer, no IPC round-trip)              |
+| Dictionary    | ECDICT (offline) · Youdao / DeepL (online) · Ollama / OpenAI / Anthropic |
+| Spaced rep    | `ts-fsrs`                                                                |
+| Graph         | cytoscape + `react-cytoscapejs` + `cytoscape-fcose`                      |
+| Secrets       | `tauri-plugin-stronghold`                                                |
+| Auto-update   | `tauri-plugin-updater` (signed `latest.json` from GitHub Releases)       |
 
 ## Development
 

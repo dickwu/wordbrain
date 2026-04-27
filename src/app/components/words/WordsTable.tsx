@@ -2,7 +2,7 @@
 
 import { Button, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import type { WordRecord } from '@/app/lib/words/types';
+import { levelFromUsage, type WordRecord } from '@/app/lib/words/types';
 import { WordNoteCell } from './WordNoteCell';
 import { WordStateCell } from './WordStateCell';
 
@@ -69,6 +69,25 @@ export function WordsTable({
       key: 'exposureCount',
       width: 110,
       sorter: (a, b) => a.exposureCount - b.exposureCount,
+    },
+    {
+      // Learning-loop "Level" — derived as MIN(10, usage_count). Drives the
+      // Story / Writing recent-words sidebar; sortable so users can find
+      // their lowest-level practice candidates fast.
+      title: 'Level',
+      dataIndex: 'usageCount',
+      key: 'level',
+      width: 90,
+      sorter: (a, b) => a.usageCount - b.usageCount,
+      render: (_: unknown, r: WordRecord) => {
+        const level = levelFromUsage(r.usageCount);
+        const color = level >= 8 ? 'green' : level >= 4 ? 'gold' : level > 0 ? 'blue' : 'default';
+        return (
+          <Tag color={color} aria-label={`level ${level}`}>
+            {level}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Note',

@@ -51,7 +51,13 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { phases: [], dryRun: false, budgetUsd: 3.0, model: 'opus', effort: 'xhigh' };
+  const args: CliArgs = {
+    phases: [],
+    dryRun: false,
+    budgetUsd: 3.0,
+    model: 'opus',
+    effort: 'xhigh',
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
@@ -61,7 +67,9 @@ function parseArgs(argv: string[]): CliArgs {
     else if (!a.startsWith('--')) args.phases.push(a);
   }
   if (args.phases.length === 0) {
-    console.error('usage: bun run scripts/batch-phases.ts <phase>... [--dry-run] [--budget N] [--model opus|sonnet|haiku] [--effort low|medium|high|xhigh|max]');
+    console.error(
+      'usage: bun run scripts/batch-phases.ts <phase>... [--dry-run] [--budget N] [--model opus|sonnet|haiku] [--effort low|medium|high|xhigh|max]'
+    );
     console.error('example: bun run scripts/batch-phases.ts 1.5 2 --dry-run');
     process.exit(2);
   }
@@ -88,16 +96,15 @@ function planExcerpt(phase: string, maxChars = 8000): string {
   const full = require('node:fs').readFileSync(PLAN_PATH, 'utf8') as string;
   const marker = new RegExp(`### Phase ${phase.replace('.', '\\.')} `, 'i');
   const idx = full.search(marker);
-  if (idx < 0) return `(phase ${phase} section not found; whole plan:)\n\n` + full.slice(0, maxChars);
+  if (idx < 0)
+    return `(phase ${phase} section not found; whole plan:)\n\n` + full.slice(0, maxChars);
   const nextHeader = full.slice(idx + 10).search(/\n### Phase /);
   const end = nextHeader < 0 ? Math.min(full.length, idx + maxChars) : idx + 10 + nextHeader;
   return full.slice(idx, end);
 }
 
 function buildPrompt(story: PRDStory, worktree: string): string {
-  const acNumbered = story.acceptanceCriteria
-    .map((c, i) => `${i + 1}. ${c}`)
-    .join('\n');
+  const acNumbered = story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n');
   return [
     `You are working on the WordBrain project, in an isolated git worktree at: ${worktree}`,
     '',
@@ -146,7 +153,9 @@ async function main(): Promise<void> {
   const prd = await loadPRD();
   await fs.mkdir(LOGS_DIR, { recursive: true });
 
-  console.log(`[batch] phases=[${args.phases.join(', ')}] model=${args.model} effort=${args.effort} budget=$${args.budgetUsd} dryRun=${args.dryRun}`);
+  console.log(
+    `[batch] phases=[${args.phases.join(', ')}] model=${args.model} effort=${args.effort} budget=$${args.budgetUsd} dryRun=${args.dryRun}`
+  );
 
   const jobs: Array<ClaudeRunOptions & { phase: string; worktree: string; story: PRDStory }> = [];
   for (const phase of args.phases) {
@@ -155,8 +164,13 @@ async function main(): Promise<void> {
       console.log(`[batch] ${story.id} already passes=true — skipping`);
       continue;
     }
-    const worktree = args.dryRun ? path.join(WORKTREES_DIR, `phase-${phase}`) : await ensureWorktree(phase);
-    const prompt = buildPrompt(story, worktree).replace('budgetUsd_will_be_interpolated', args.budgetUsd.toFixed(2));
+    const worktree = args.dryRun
+      ? path.join(WORKTREES_DIR, `phase-${phase}`)
+      : await ensureWorktree(phase);
+    const prompt = buildPrompt(story, worktree).replace(
+      'budgetUsd_will_be_interpolated',
+      args.budgetUsd.toFixed(2)
+    );
     jobs.push({
       phase,
       worktree,
