@@ -10,8 +10,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Empty, Space, Spin, Tag, theme, Typography } from 'antd';
-import { ReloadOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { Alert, Empty, Spin, theme } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import {
   buildNetwork,
   isTauri,
@@ -28,8 +28,6 @@ import {
   type NetworkFilterValue,
 } from './NetworkFilters';
 import { useEffectiveTheme } from '@/app/stores/themeStore';
-
-const { Title, Text } = Typography;
 
 export interface NetworkViewProps {
   /** Bumped whenever callers want the graph refetched (e.g. after a new
@@ -91,62 +89,70 @@ export function NetworkView({ refreshKey = 0, onOpenMaterial }: NetworkViewProps
 
   if (loading) {
     return (
-      <div style={{ padding: 24, textAlign: 'center' }}>
+      <div className="page wide" style={{ padding: 80, textAlign: 'center' }}>
         <Spin />
       </div>
     );
   }
 
   if (error) {
-    return <Alert type="warning" message={error} showIcon />;
+    return (
+      <div className="page wide">
+        <Alert type="warning" message={error} showIcon />
+      </div>
+    );
   }
 
   if (!payload || payload.nodes.length === 0) {
     return (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="No co-occurring words yet. Import a few materials and come back."
-      />
+      <div className="page wide">
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">Bipartite graph · word ↔ material</div>
+            <h1 className="page-title">
+              Network<em>.</em>
+            </h1>
+            <p className="page-sub">Density grows as your vocabulary does.</p>
+          </div>
+        </div>
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="No co-occurring words yet. Import a few materials and come back."
+        />
+      </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}
-      >
+    <div
+      className="page wide"
+      style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}
+    >
+      <div className="page-header">
         <div>
-          <Space size={10} align="baseline">
-            <ShareAltOutlined style={{ fontSize: 20, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0 }}>
-              Word network
-            </Title>
-          </Space>
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Showing <strong>{payload.nodes.length}</strong> of{' '}
-              {payload.total_words.toLocaleString()} words · {payload.edges.length} co-occurrence
-              edges
-              {layoutMs !== null && (
-                <>
-                  {' '}
-                  · fcose layout in{' '}
-                  <Tag color={layoutMs < 2000 ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>
-                    {layoutMs.toFixed(0)} ms
-                  </Tag>
-                </>
-              )}
-            </Text>
-          </div>
+          <div className="page-eyebrow">Bipartite graph · word ↔ material</div>
+          <h1 className="page-title">
+            Network<em>.</em>
+          </h1>
+          <p className="page-sub">
+            Showing <strong>{payload.nodes.length}</strong> of{' '}
+            {payload.total_words.toLocaleString()} words · {payload.edges.length} co-occurrence
+            edges
+            {layoutMs !== null && (
+              <>
+                {' '}
+                · fcose layout in{' '}
+                <span className="mono small" style={{ color: 'var(--ink-2)' }}>
+                  {layoutMs.toFixed(0)} ms
+                </span>
+              </>
+            )}
+            .
+          </p>
         </div>
-        <Button icon={<ReloadOutlined />} size="small" onClick={() => setReloadTick((t) => t + 1)}>
-          Refresh
-        </Button>
+        <button type="button" className="btn sm" onClick={() => setReloadTick((t) => t + 1)}>
+          <ReloadOutlined /> Refresh
+        </button>
       </div>
 
       <NetworkFilters

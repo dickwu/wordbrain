@@ -1,21 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Button, Divider, Layout, Space, theme, Tooltip, Typography } from 'antd';
-import {
-  BookOutlined,
-  BulbFilled,
-  BulbOutlined,
-  EditOutlined,
-  FileTextOutlined,
-  HistoryOutlined,
-  PlusOutlined,
-  ProfileOutlined,
-  ReadOutlined,
-  SettingOutlined,
-  ShareAltOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons';
+import { App as AntApp, Button } from 'antd';
 import { ReaderPane } from '@/app/components/reader/ReaderPane';
 import {
   MaterialImportModal,
@@ -33,16 +19,16 @@ import { WordLookupModal } from '@/app/components/dictionary/WordLookupModal';
 import { NetworkView } from '@/app/components/network/NetworkView';
 import { WordsView } from '@/app/components/words/WordsView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
-import { DueQueueBadge } from '@/app/components/srs/DueQueueBadge';
 import { StoryView } from '@/app/components/story/StoryView';
-import { StoryUnreadBadge } from '@/app/components/story/StoryUnreadBadge';
 import { WritingView } from '@/app/components/writing/WritingView';
+import { AppSidebar, type ViewId } from '@/app/components/shell/AppSidebar';
+import { AppToolbar } from '@/app/components/shell/AppToolbar';
+import { Icons } from '@/app/components/shell/Icons';
 import { useUsageStore } from '@/app/stores/usageStore';
 import { recentPracticeWordsIpc } from '@/app/lib/ipc';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
 import { useSettingsStore } from '@/app/stores/settingsStore';
-import { refreshDueCount } from '@/app/stores/srsStore';
-import { useEffectiveTheme, useThemeStore } from '@/app/stores/themeStore';
+import { refreshDueCount, useSrsStore } from '@/app/stores/srsStore';
 import {
   FirstLaunchWizard,
   needsFirstLaunchWizard,
@@ -50,6 +36,7 @@ import {
 import {
   isTauri,
   listChildMaterials,
+  listMaterials,
   loadMaterial,
   recordMaterialClose,
   saveMaterial,
@@ -60,21 +47,21 @@ import {
 } from '@/app/lib/ipc';
 import { buildMaterialInput, deriveTitle } from '@/app/lib/material-builder';
 
-const { Sider, Content } = Layout;
-const { Title, Paragraph, Text } = Typography;
+const APP_VERSION = '0.1.9';
 
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
-type ViewMode =
-  | 'reader'
-  | 'library'
-  | 'review'
-  | 'story'
-  | 'writing'
-  | 'network'
-  | 'words'
-  | 'searches'
-  | 'settings';
+const VIEW_LABELS: Record<ViewId, string> = {
+  reader: 'Reader',
+  library: 'Library',
+  review: 'Review',
+  story: 'Story',
+  writing: 'Writing',
+  words: 'Words',
+  network: 'Network',
+  searches: 'Searches',
+  settings: 'Settings',
+};
 
 export default function Home() {
   const { message } = AntApp.useApp();
@@ -82,14 +69,14 @@ export default function Home() {
   const [historyLookup, setHistoryLookup] = useState<{ word: string; nonce: number } | null>(null);
   const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
-  const [view, setView] = useState<ViewMode>('reader');
+  const [view, setView] = useState<ViewId>('reader');
   const [wordDrawerLemma, setWordDrawerLemma] = useState<string | null>(null);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
+  const [storyUnread, setStoryUnread] = useState(0);
+  const [writingHint, setWritingHint] = useState<string | null>(null);
   const knownCount = useWordStore((s) => s.known.size);
   const hydrated = useWordStore((s) => s.hydrated);
-  const effectiveTheme = useEffectiveTheme();
-  const toggleTheme = useThemeStore((s) => s.toggleMode);
-  const { token } = theme.useToken();
+  const dueCount = useSrsStore((s) => s.dueCount);
   const [wizardOpen, setWizardOpen] = useState(false);
   const prevMaterialRef = useRef<number | null>(null);
 
@@ -101,7 +88,7 @@ export default function Home() {
   const [pickerBookTitle, setPickerBookTitle] = useState('');
   const [pickerChapters, setPickerChapters] = useState<EpubChapter[] | null>(null);
   const [pickerSaved, setPickerSaved] = useState<MaterialSummary[] | null>(null);
-  const [activeBookId, setActiveBookId] = useState<number | null>(null);
+  const [, setActiveBookId] = useState<number | null>(null);
 
   // Hydrate known-set from the DB on first mount; show the first-launch wizard
   // if the user has never picked a cutoff.
@@ -109,13 +96,10 @@ export default function Home() {
     let cancelled = false;
     (async () => {
       try {
-        // Load persisted preferences before the updater can read them — if the
-        // user previously paused auto-updates, we don't want a silent check to
-        // fire before the store hydrates.
         await useSettingsStore.getState().hydrate();
         if (isTauri() && (await needsFirstLaunchWizard())) {
           if (!cancelled) setWizardOpen(true);
-          return; // wizard's onFinish triggers the hydrate
+          return;
         }
         await hydrateFromDb();
         void refreshDueCount();
@@ -128,9 +112,51 @@ export default function Home() {
     };
   }, []);
 
-  // When the active material changes (reader switches away from it), flush an
-  // auto-exposure close for the outgoing material and surface the graduation
-  // toast. See AC4 of Phase-3 story.
+  // Poll for due-count + story-unread so the sidebar badges stay live without
+  // us having to wire each mutation site up to call refresh on its own.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const tick = async () => {
+      try {
+        const rows = await listMaterials();
+        setStoryUnread(
+          rows.filter((m) => m.source_kind === 'ai_story' && m.read_at === null).length
+        );
+      } catch (err) {
+        console.warn('[wordbrain] story badge listMaterials failed', err);
+      }
+      void refreshDueCount();
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 30_000);
+    return () => window.clearInterval(id);
+  }, [libraryRefresh]);
+
+  // Compute the writing-hint label for the sidebar tooltip — lowest-level
+  // recent practice word, so the user knows what they would be drilling.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isTauri()) return;
+      try {
+        const rows = await recentPracticeWordsIpc(14, 50);
+        if (cancelled || rows.length === 0) {
+          setWritingHint(null);
+          return;
+        }
+        const lowest = rows[0];
+        setWritingHint(`next: ${lowest.lemma} (lvl ${lowest.level})`);
+        useUsageStore.getState().setMany(rows.map((r) => [r.id, r.usageCount] as const));
+      } catch {
+        if (!cancelled) setWritingHint(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Auto-exposure flush + graduation toast when reader switches material.
   const closeMaterial = useCallback(
     async (materialId: number) => {
       if (!isTauri()) return;
@@ -140,9 +166,6 @@ export default function Home() {
         const mastered = outcome.graduated_to_known;
         if (learned.length === 0 && mastered.length === 0) return;
 
-        // Mirror the graduation into the in-memory store so reader highlight
-        // updates immediately — 'learning' is still shown as unknown, but
-        // 'known' should disappear from the highlights at once.
         if (mastered.length) {
           const store = useWordStore.getState();
           for (const lemma of mastered) store.markKnown(lemma);
@@ -162,7 +185,6 @@ export default function Home() {
                 onClick={async () => {
                   try {
                     await undoAutoExposure(mastered, learned);
-                    // Re-hydrate so the in-memory set mirrors the DB.
                     await hydrateFromDb();
                     message.info('Undid auto-exposure graduation');
                     setLibraryRefresh((n) => n + 1);
@@ -185,8 +207,6 @@ export default function Home() {
     [message]
   );
 
-  // Watch activeMaterialId transitions: whenever it changes to something new
-  // (or to null), record a close on the previous one.
   useEffect(() => {
     const prev = prevMaterialRef.current;
     if (prev !== null && prev !== activeMaterialId) {
@@ -204,10 +224,7 @@ export default function Home() {
         return;
       }
       try {
-        const input = buildMaterialInput({
-          title: deriveTitle(raw),
-          raw,
-        });
+        const input = buildMaterialInput({ title: deriveTitle(raw), raw });
         const out = await saveMaterial(input);
         setActiveMaterialId(out.material_id);
         setLibraryRefresh((n) => n + 1);
@@ -262,10 +279,6 @@ export default function Home() {
         return;
       }
       try {
-        // 1. Persist the book-level parent material. Its `raw_text` is a
-        //    concatenation of chapter bodies so search / library summaries
-        //    still see the full corpus; `tiptap_json` is a minimal stub
-        //    pointing readers at the chapter picker instead of the body.
         const aggregateRaw = chapters.map((c) => c.raw_text).join('\n\n');
         const bookInput = buildMaterialInput({
           title: suggestedTitle,
@@ -289,9 +302,6 @@ export default function Home() {
         });
         const bookOut = await saveMaterial(bookInput);
 
-        // 2. Persist every chapter as a child. Each chapter gets its own
-        //    `word_materials` edges so the bipartite graph still reflects
-        //    where a lemma actually appeared.
         for (const ch of chapters) {
           const tiptapJson = safeParseTiptap(ch.tiptap_json) ?? {
             type: 'doc',
@@ -309,9 +319,6 @@ export default function Home() {
           await saveMaterial(chInput);
         }
 
-        // 3. Pull the freshly-saved chapter summaries so badges use the same
-        //    unknown count the DB sees; keep the in-memory chapters too so
-        //    the picker has body text for instant "open chapter" hand-off.
         const saved = await listChildMaterials(bookOut.material_id).catch(() => []);
 
         setActiveBookId(bookOut.material_id);
@@ -330,10 +337,6 @@ export default function Home() {
     [message]
   );
 
-  /** Open a chapter from the picker — set the reader content, track its id
-   * as the active material so auto-exposure fires on switch. Prefers the
-   * in-memory chapter body if available (fresh drop), otherwise falls back
-   * to `load_material`. */
   const onOpenPickerChapter = useCallback(
     async (index: number) => {
       try {
@@ -367,17 +370,15 @@ export default function Home() {
   const onOpenFromLibrary = useCallback(
     async (mat: MaterialSummary) => {
       try {
-        // Book-level EPUB row → open the chapter picker instead of the reader.
         if (mat.source_kind === 'epub') {
           const saved = await listChildMaterials(mat.id);
           setActiveBookId(mat.id);
           setPickerBookTitle(mat.title);
-          setPickerChapters(null); // no in-memory bodies; picker will load on open
+          setPickerChapters(null);
           setPickerSaved(saved);
           setPickerOpen(true);
           return;
         }
-        // Standalone or chapter row → load full body into the reader.
         const full = await loadMaterial(mat.id);
         if (!full) {
           message.error('Material not found');
@@ -399,185 +400,101 @@ export default function Home() {
     setWordDrawerLemma(null);
   }, []);
 
-  const sidebar = useMemo(
-    () => (
-      <Sider
-        width={220}
-        theme={effectiveTheme}
-        style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
-      >
-        <div
-          style={{
-            padding: 20,
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 8,
-          }}
-        >
-          <div>
-            <Title level={4} style={{ margin: 0 }}>
-              WordBrain
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              v0.1.0
-            </Text>
-          </div>
-          <Tooltip title={`Switch to ${effectiveTheme === 'dark' ? 'light' : 'dark'} theme`}>
-            <Button
-              type="text"
-              size="small"
-              aria-label="Toggle theme"
-              icon={effectiveTheme === 'dark' ? <BulbFilled /> : <BulbOutlined />}
-              onClick={toggleTheme}
-            />
-          </Tooltip>
-        </div>
-        <Space orientation="vertical" style={{ padding: '0 12px', width: '100%' }} size={4}>
-          <SidebarEntry
-            icon={<BookOutlined />}
-            label="Library"
-            active={view === 'library'}
-            onClick={() => setView('library')}
+  const toolbarRight = useMemo(() => {
+    switch (view) {
+      case 'reader':
+        return (
+          <>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => {
+                const selection = window.getSelection?.()?.toString().trim().toLowerCase();
+                if (!selection) return;
+                setWordDrawerLemma(selection.split(/\s+/)[0] ?? selection);
+              }}
+            >
+              <Icons.Search size={12} /> Related docs
+            </button>
+            <button type="button" className="btn primary sm" onClick={() => setImportOpen(true)}>
+              <Icons.Plus size={12} /> Paste material
+            </button>
+          </>
+        );
+      case 'library':
+        return (
+          <button type="button" className="btn primary sm" onClick={() => setImportOpen(true)}>
+            <Icons.Plus size={12} /> Import
+          </button>
+        );
+      default:
+        return null;
+    }
+  }, [view]);
+
+  const renderView = () => {
+    switch (view) {
+      case 'reader':
+        return <ReaderView readerSeed={readerSeed} onLemmaDrill={setWordDrawerLemma} />;
+      case 'review':
+        return <ReviewSession />;
+      case 'story':
+        return <StoryView onDrillLemma={setWordDrawerLemma} />;
+      case 'writing':
+        return <WritingView />;
+      case 'network':
+        return (
+          <NetworkView
+            refreshKey={libraryRefresh}
+            onOpenMaterial={async (id) => {
+              try {
+                const full = await loadMaterial(id);
+                if (!full) {
+                  message.error('Material not found');
+                  return;
+                }
+                setReaderSeed(full.raw_text);
+                setActiveMaterialId(id);
+                setView('reader');
+              } catch (err) {
+                message.error(`open material failed: ${err}`);
+              }
+            }}
           />
-          <SidebarEntry
-            icon={<ReadOutlined />}
-            label="Reader"
-            active={view === 'reader'}
-            onClick={() => setView('reader')}
-          />
-          <DueQueueBadge>
-            <SidebarEntry
-              icon={<ThunderboltOutlined />}
-              label="Review"
-              active={view === 'review'}
-              onClick={() => setView('review')}
-            />
-          </DueQueueBadge>
-          <StoryUnreadBadge>
-            <SidebarEntry
-              icon={<FileTextOutlined />}
-              label="Story"
-              active={view === 'story'}
-              onClick={() => setView('story')}
-            />
-          </StoryUnreadBadge>
-          <WritingSidebarTooltip>
-            <SidebarEntry
-              icon={<EditOutlined />}
-              label="Writing"
-              active={view === 'writing'}
-              onClick={() => setView('writing')}
-            />
-          </WritingSidebarTooltip>
-          <SidebarEntry
-            icon={<ProfileOutlined />}
-            label="Words"
-            active={view === 'words'}
-            onClick={() => setView('words')}
-          />
-          <SidebarEntry
-            icon={<ShareAltOutlined />}
-            label="Network"
-            active={view === 'network'}
-            onClick={() => setView('network')}
-          />
-          <SidebarEntry
-            icon={<HistoryOutlined />}
-            label="Searches"
-            active={view === 'searches'}
-            onClick={() => setView('searches')}
-          />
-          <SidebarEntry
-            icon={<SettingOutlined />}
-            label="Settings"
-            active={view === 'settings'}
-            onClick={() => setView('settings')}
-          />
-        </Space>
-        <Divider style={{ margin: '24px 12px' }} />
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="Show known words"
-          onClick={() => setView('words')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setView('words');
-            }
-          }}
-          style={{ padding: '0 20px', cursor: 'pointer' }}
-        >
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Known words
-          </Text>
-          <div style={{ fontSize: 24, fontWeight: 600 }}>{knownCount.toLocaleString()}</div>
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {hydrated ? 'hydrated from Turso SQLite' : 'using Phase-1 fallback seed'}
-          </Text>
-        </div>
-      </Sider>
-    ),
-    [view, knownCount, hydrated, effectiveTheme, toggleTheme, token]
-  );
+        );
+      case 'words':
+        return <WordsView onSwitchToReader={() => setView('reader')} />;
+      case 'searches':
+        return (
+          <SearchHistoryView onSearch={(word) => setHistoryLookup({ word, nonce: Date.now() })} />
+        );
+      case 'settings':
+        return <SettingsView />;
+      case 'library':
+      default:
+        return <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />;
+    }
+  };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      {sidebar}
-
-      <Layout>
-        <Content
-          style={{
-            padding: 40,
-            maxWidth: view === 'network' || view === 'words' ? undefined : 960,
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {view === 'reader' ? (
-            <ReaderView
-              readerSeed={readerSeed}
-              setImportOpen={setImportOpen}
-              onLemmaDrill={setWordDrawerLemma}
-            />
-          ) : view === 'review' ? (
-            <ReviewSession />
-          ) : view === 'story' ? (
-            <StoryView onDrillLemma={setWordDrawerLemma} />
-          ) : view === 'writing' ? (
-            <WritingView />
-          ) : view === 'network' ? (
-            <NetworkView
-              refreshKey={libraryRefresh}
-              onOpenMaterial={async (id) => {
-                try {
-                  const full = await loadMaterial(id);
-                  if (!full) {
-                    message.error('Material not found');
-                    return;
-                  }
-                  setReaderSeed(full.raw_text);
-                  setActiveMaterialId(id);
-                  setView('reader');
-                } catch (err) {
-                  message.error(`open material failed: ${err}`);
-                }
-              }}
-            />
-          ) : view === 'words' ? (
-            <WordsView onSwitchToReader={() => setView('reader')} />
-          ) : view === 'searches' ? (
-            <SearchHistoryView onSearch={(word) => setHistoryLookup({ word, nonce: Date.now() })} />
-          ) : view === 'settings' ? (
-            <SettingsView />
-          ) : (
-            <LibraryView refreshKey={libraryRefresh} onOpen={onOpenFromLibrary} />
-          )}
-        </Content>
-        <StatusBar />
-      </Layout>
+    <div className="app-shell">
+      <div className="app-body">
+        <AppSidebar
+          view={view}
+          onChange={setView}
+          knownCount={knownCount}
+          dueCount={dueCount}
+          storyUnread={storyUnread}
+          hydrated={hydrated}
+          appVersion={APP_VERSION}
+          writingHint={writingHint}
+        />
+        <div className="main">
+          <AppToolbar crumbs={['WordBrain', VIEW_LABELS[view]]} right={toolbarRight} />
+          <div className="view">{renderView()}</div>
+          <StatusBar />
+        </div>
+      </div>
 
       <MaterialsForWordDrawer
         lemma={wordDrawerLemma}
@@ -627,141 +544,45 @@ export default function Home() {
         onOpenSettings={() => setView('settings')}
         onShowLinked={setWordDrawerLemma}
       />
-    </Layout>
+    </div>
   );
 }
 
+/**
+ * Reader view shell — editorial header (eyebrow / serif title / sub) wrapping
+ * the existing Tiptap-backed `ReaderPane`. The pane itself keeps its in-place
+ * decorations and word-card popover.
+ */
 function ReaderView({
   readerSeed,
-  setImportOpen,
   onLemmaDrill,
 }: {
   readerSeed: string;
-  setImportOpen: (v: boolean) => void;
   onLemmaDrill: (lemma: string) => void;
 }) {
   return (
-    <>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          marginBottom: 12,
-        }}
-      >
+    <div className="page" style={{ maxWidth: 1080 }}>
+      <div className="page-header">
         <div>
-          <Title level={3} style={{ margin: 0 }}>
-            Reader
-          </Title>
-          <Text type="secondary">
-            Unknown words are highlighted. Click one to open the word card.
-          </Text>
+          <div className="page-eyebrow">Reading · current</div>
+          <h1 className="page-title">
+            Reader<em>.</em>
+          </h1>
+          <p className="page-sub">
+            Plum-tinted words are unknown. Click one to look it up; the marginalia stack remembers
+            the trail.
+          </p>
         </div>
-        <Space>
-          <Button
-            onClick={() => {
-              const selection = window.getSelection?.()?.toString().trim().toLowerCase();
-              if (!selection) return;
-              onLemmaDrill(selection.split(/\s+/)[0] ?? selection);
-            }}
-          >
-            Related docs for selection
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setImportOpen(true)}>
-            Paste reading material
-          </Button>
-        </Space>
       </div>
-
       <ReaderPane initialContent={readerSeed} onDrillLemma={onLemmaDrill} />
-
-      <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 16 }}>
-        Closing (switching away from) a material auto-bumps exposure counters and graduates
-        frequently-seen words into the known set. Use the sidebar to jump to the Library view.
-      </Paragraph>
-    </>
+    </div>
   );
 }
 
-/** Safe JSON parse for Tiptap JSON returned from Rust; falls back to `null`
- * so the caller can construct a minimal paragraph doc. */
 function safeParseTiptap(raw: string): unknown | null {
   try {
     return JSON.parse(raw);
   } catch {
     return null;
   }
-}
-
-/**
- * Sidebar wrapper for the Writing entry — shows the lowest-level recent word
- * as a tooltip ("next: trepidation (lvl 1)") so the user knows what they would
- * be practising before they click in.
- */
-function WritingSidebarTooltip({ children }: { children: React.ReactNode }) {
-  const [hint, setHint] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isTauri()) return;
-      try {
-        const rows = await recentPracticeWordsIpc(14, 50);
-        if (cancelled || rows.length === 0) {
-          setHint(null);
-          return;
-        }
-        const lowest = rows[0];
-        setHint(`next: ${lowest.lemma} (lvl ${lowest.level})`);
-        useUsageStore.getState().setMany(rows.map((r) => [r.id, r.usageCount] as const));
-      } catch {
-        if (!cancelled) setHint(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!hint) return <>{children}</>;
-  return (
-    <Tooltip placement="right" title={hint}>
-      <span style={{ display: 'block' }}>{children}</span>
-    </Tooltip>
-  );
-}
-
-function SidebarEntry({
-  icon,
-  label,
-  disabled,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  disabled?: boolean;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const { token } = theme.useToken();
-  return (
-    <div
-      onClick={disabled ? undefined : onClick}
-      style={{
-        padding: '8px 12px',
-        borderRadius: 6,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        color: disabled ? token.colorTextDisabled : active ? token.colorPrimary : token.colorText,
-        background: active ? token.controlItemBgActive : 'transparent',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-    >
-      {icon}
-      <span>{label}</span>
-    </div>
-  );
 }

@@ -237,14 +237,17 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>
-        <Title level={3} style={{ margin: 0 }}>
-          Writing Train
-        </Title>
-        <Text type="secondary">
-          Pick a recent word, write one sentence using it, get word-usage feedback.
-        </Text>
+    <div className="page wide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="page-header">
+        <div>
+          <div className="page-eyebrow">Practice · in your own words</div>
+          <h1 className="page-title">
+            Writing<em>.</em>
+          </h1>
+          <p className="page-sub">
+            Pick a recent word, write one sentence using it, get word-usage feedback.
+          </p>
+        </div>
       </div>
 
       {!isTauri() && (

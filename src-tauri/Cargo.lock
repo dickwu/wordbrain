@@ -10187,7 +10187,7 @@ dependencies = [
 
 [[package]]
 name = "wordbrain"
-version = "0.1.7"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

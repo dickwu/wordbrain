@@ -37,17 +37,13 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": [
-      "assets/ecdict.db"
-    ],
+    "resources": ["assets/ecdict.db"],
     "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlDQjczQzkxNUIwNzU3NUQKUldSZFZ3ZGJrVHkzbktiNUk2RzRnRE5SWnZFK1hJbmp5bDd1NFB5UmRPRG0rT3pJOXllRGtseTUK",
-      "endpoints": [
-        "https://github.com/dickwu/wordbrain/releases/latest/download/latest.json"
-      ]
+      "endpoints": ["https://github.com/dickwu/wordbrain/releases/latest/download/latest.json"]
     }
   }
 }

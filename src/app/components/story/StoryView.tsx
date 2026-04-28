@@ -21,7 +21,6 @@ import {
   CloseCircleOutlined,
   CloseOutlined,
   DeleteOutlined,
-  FileTextOutlined,
   HistoryOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
@@ -740,22 +739,17 @@ function StoryHistoryPanel({
 
 function ViewShell({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          marginBottom: 12,
-        }}
-      >
+    <div className="page wide">
+      <div className="page-header">
         <div>
-          <Title level={3} style={{ margin: 0 }}>
-            <FileTextOutlined /> Story Review
-          </Title>
-          <Text type="secondary">
-            AI-composed cloze stories that re-use your recent low-level words.
-          </Text>
+          <div className="page-eyebrow">Generated · cloze practice</div>
+          <h1 className="page-title">
+            Story<em>.</em>
+          </h1>
+          <p className="page-sub">
+            Short pieces written around the words you&rsquo;re learning. Pick blanks, get a verdict
+            and an AI explanation when you&rsquo;re wrong.
+          </p>
         </div>
       </div>
       {children}

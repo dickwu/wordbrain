@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Alert, Button, Empty, Space, Typography } from 'antd';
+import { App as AntApp, Alert, Button, Empty, Space } from 'antd';
 import { isTauri } from '@/app/lib/ipc';
 import type { ListWordsFilter } from '@/app/lib/words/types';
 import {
@@ -15,8 +15,6 @@ import {
 import { useDebouncedValue } from './useDebouncedValue';
 import { WordsTable } from './WordsTable';
 import { WordsToolbar, type StateFilter } from './WordsToolbar';
-
-const { Title, Text } = Typography;
 
 interface WordsViewProps {
   onSwitchToReader?: () => void;
@@ -147,23 +145,18 @@ export function WordsView({ onSwitchToReader }: WordsViewProps) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-        }}
-      >
+    <div className="page wide" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="page-header">
         <div>
-          <Title level={3} style={{ margin: 0 }}>
-            Words
-          </Title>
-          <Text type="secondary">
+          <div className="page-eyebrow">Your vocabulary</div>
+          <h1 className="page-title">
+            Words<em>.</em>
+          </h1>
+          <p className="page-sub">
             Browse, search, and edit your known vocabulary. The sidebar count reflects
             &ldquo;known&rdquo; rows only; &ldquo;learning&rdquo; rows still highlight in the
             reader.
-          </Text>
+          </p>
         </div>
       </div>
 

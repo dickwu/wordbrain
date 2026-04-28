@@ -4,7 +4,6 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useRef, useState } from 'react';
-import { theme } from 'antd';
 import {
   WordHighlightExtension,
   wordHighlightPluginKey,
@@ -50,7 +49,6 @@ export function ReaderPane({
   placeholder = 'Paste or type English text here — unknown words will be highlighted as you go.',
   onDrillLemma,
 }: ReaderPaneProps) {
-  const { token } = theme.useToken();
   const [lookup, setLookup] = useState<WordHighlightClickPayload | null>(null);
   const version = useWordStore((s) => s.version);
   const paintBudgetRef = useRef<number>(0);
@@ -112,20 +110,8 @@ export function ReaderPane({
   };
 
   return (
-    <div style={{ position: 'relative' }} onDoubleClick={openSelectedWord}>
-      <EditorContent
-        editor={editor}
-        style={{
-          minHeight: 320,
-          padding: 20,
-          border: `1px solid ${token.colorBorder}`,
-          borderRadius: 8,
-          background: token.colorBgContainer,
-          color: token.colorText,
-          lineHeight: 1.7,
-          fontSize: 15,
-        }}
-      />
+    <div className="wb-reader-shell" onDoubleClick={openSelectedWord}>
+      <EditorContent editor={editor} className="wb-reader-prose" />
       {lookup && editor && (
         <WordLookupModal
           visible={true}
@@ -137,6 +123,30 @@ export function ReaderPane({
           onShowLinked={onDrillLemma}
         />
       )}
+      <style>{`
+        .wb-reader-shell { position: relative; }
+        .wb-reader-prose .ProseMirror,
+        .wb-reader-prose .wb-reader-surface {
+          font-family: var(--serif);
+          font-size: 19px;
+          line-height: 1.65;
+          color: var(--ink);
+          min-height: 360px;
+          padding: 8px 0;
+          outline: none;
+          text-wrap: pretty;
+          hanging-punctuation: first last;
+        }
+        .wb-reader-prose .ProseMirror p { margin: 0 0 1.2em; }
+        .wb-reader-prose .ProseMirror p.is-editor-empty:first-child::before {
+          color: var(--ink-4);
+          font-style: italic;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Button, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { levelFromUsage, type WordRecord } from '@/app/lib/words/types';
@@ -23,6 +24,15 @@ function formatDate(ms: number | null): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+const TABLE_SCROLL_X = 1200;
+const DEFAULT_TABLE_SCROLL_Y = 520;
+const MIN_TABLE_SCROLL_Y = 320;
+
+function getTableScrollY(): number {
+  if (typeof window === 'undefined') return DEFAULT_TABLE_SCROLL_Y;
+  return Math.max(MIN_TABLE_SCROLL_Y, Math.round(window.innerHeight * 0.6));
+}
+
 export function WordsTable({
   rows,
   loading,
@@ -32,6 +42,16 @@ export function WordsTable({
   onStateChange,
   onNoteSave,
 }: WordsTableProps) {
+  const [scrollY, setScrollY] = useState(DEFAULT_TABLE_SCROLL_Y);
+
+  useEffect(() => {
+    const updateScrollY = () => setScrollY(getTableScrollY());
+
+    updateScrollY();
+    window.addEventListener('resize', updateScrollY);
+    return () => window.removeEventListener('resize', updateScrollY);
+  }, []);
+
   const columns: ColumnsType<WordRecord> = [
     {
       title: 'Lemma',
@@ -120,7 +140,7 @@ export function WordsTable({
         onChange: (keys) => onSelectionChange(new Set(keys as string[])),
         preserveSelectedRowKeys: true,
       }}
-      scroll={{ y: '60vh', x: 'max-content' }}
+      scroll={{ y: scrollY, x: TABLE_SCROLL_X }}
       pagination={false}
     />
   );

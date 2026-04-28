@@ -1,91 +1,791 @@
 @import 'tailwindcss';
 
+/* ========================================================================
+   WordBrain — Editorial Redesign
+   Paper palette + Source Serif 4 / Inter / JetBrains Mono.
+   Ported pixel-faithfully from the Claude Design handoff
+   (`wordbrain-handoff/project/WordBrain.html`).
+   ======================================================================== */
+
+:root {
+  --paper: #f6f1e7;
+  --paper-2: #efe9dc;
+  --paper-3: #e7e0cf;
+  --ink: #1f1a14;
+  --ink-2: #3b3327;
+  --ink-3: #6b6052;
+  --ink-4: #9c9384;
+  --rule: #d9cfb9;
+  --rule-soft: #e8e0cf;
+
+  --accent: #8a4a23; /* burnt sienna */
+  --accent-soft: #c97a4f;
+  --accent-bg: #ecdccd;
+
+  /* Word states */
+  --known-bg: transparent;
+  --known-ink: var(--ink);
+  --learning-bg: #f0d9a8;
+  --learning-ink: #6a4a1a;
+  --learning-line: #b88a3e;
+  --unknown-bg: #d9c5dc;
+  --unknown-ink: #4a2956;
+  --unknown-line: #7a4d8a;
+  --review-bg: #c8d6c0;
+  --review-ink: #2d4426;
+  --review-line: #547a4a;
+  --sweet-bg: #d8e2c6;
+  --sweet-ink: #3b542a;
+  --sweet-line: #6e8a4c;
+  --outside-bg: #e8d8d2;
+  --outside-ink: #7a3a23;
+  --outside-line: #b25c3a;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 3px rgba(60, 40, 15, 0.06);
+  --shadow-2: 0 2px 4px rgba(60, 40, 15, 0.06), 0 12px 28px rgba(60, 40, 15, 0.1);
+
+  --serif: var(--font-serif), 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --sans: var(--font-sans), -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --paper: #1a1714;
+  --paper-2: #221e1a;
+  --paper-3: #2a2520;
+  --ink: #ece4d4;
+  --ink-2: #c8bea9;
+  --ink-3: #948a78;
+  --ink-4: #6b6356;
+  --rule: #3a3329;
+  --rule-soft: #2e2924;
+
+  --accent: #d99873;
+  --accent-soft: #b87045;
+  --accent-bg: #3a2d22;
+
+  --learning-bg: #4a3a1f;
+  --learning-ink: #f0d9a8;
+  --learning-line: #b88a3e;
+  --unknown-bg: #3d2a47;
+  --unknown-ink: #e0c5e8;
+  --unknown-line: #9a6dab;
+  --review-bg: #2a3a23;
+  --review-ink: #c8dcc0;
+  --review-line: #7aa066;
+  --sweet-bg: #2a3a23;
+  --sweet-ink: #c8dcc0;
+  --outside-bg: #3a241c;
+  --outside-ink: #e8b69a;
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.25), 0 12px 28px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
 html {
   color-scheme: light;
 }
-html.dark {
-  color-scheme: dark;
+
+* {
+  box-sizing: border-box;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  height: 100%;
+  background: var(--paper);
+  font-family: var(--sans);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-body {
-  background: #ffffff;
-  color: #111827;
+/* Subtle scrollbars across the whole app, in editorial colours. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(80, 60, 30, 0.18);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(80, 60, 30, 0.28);
+  background-clip: content-box;
+}
+[data-theme='dark'] *::-webkit-scrollbar-thumb {
+  background: rgba(220, 200, 160, 0.16);
+  background-clip: content-box;
+}
+[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(220, 200, 160, 0.28);
+  background-clip: content-box;
 }
 
-html.dark body {
-  background: #0f172a;
-  color: #e2e8f0;
+/* ----- Type utilities used across views ----- */
+.serif {
+  font-family: var(--serif);
+}
+.sans {
+  font-family: var(--sans);
+}
+.mono {
+  font-family: var(--mono);
+}
+.muted {
+  color: var(--ink-3);
+}
+.dim {
+  color: var(--ink-4);
+}
+.small {
+  font-size: 12px;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Word-highlight decoration styles (used by Tiptap extension in Phase 1) */
-.wb-word--known {
-  /* inherit default body colour */
+/* ----- Layout primitives ----- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+}
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.wb-word--learning {
-  border-bottom: 1px dashed #fa8c16;
-  padding-bottom: 1px;
+/* ----- Sidebar ----- */
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--paper-2), var(--paper));
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px 12px;
 }
-
-html.dark .wb-word--learning {
-  border-bottom-color: #fbbf24;
+.sidebar .brand {
+  padding: 4px 10px 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
-
-.wb-word--unknown {
-  background: rgba(79, 70, 229, 0.14);
-  border-radius: 3px;
+.brand .mark {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.brand .mark em {
+  font-style: italic;
+  color: var(--accent);
+  font-weight: 500;
+}
+.brand .ver {
+  font: 500 10px/1 var(--mono);
+  color: var(--ink-4);
+  letter-spacing: 0.04em;
+}
+.nav-section {
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 14px 12px 6px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font: 500 13px/1 var(--sans);
+  color: var(--ink-2);
   cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition:
+    background 0.1s,
+    color 0.1s;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+.nav-item:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.nav-item.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+.nav-item.active .badge {
+  background: var(--paper);
+  color: var(--ink);
+}
+.nav-item .icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.nav-item .label {
+  flex: 1;
+}
+.nav-item .badge {
+  font: 600 10px/1 var(--mono);
+  background: var(--accent);
+  color: #fff;
+  padding: 3px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.nav-item .badge.muted {
+  background: var(--paper-3);
+  color: var(--ink-3);
+}
+.sidebar .stats {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.sidebar .stat {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.stat .num {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.stat .lbl {
+  font-size: 10px;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ----- Main column ----- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.toolbar {
+  height: 52px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+.toolbar .crumbs {
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.toolbar .crumbs .here {
+  color: var(--ink);
+  font-style: italic;
+  font-weight: 500;
+}
+.toolbar .crumbs .sep {
+  margin: 0 8px;
+  color: var(--ink-4);
+}
+.toolbar .sp {
+  flex: 1;
+}
+.view {
+  flex: 1;
+  overflow: auto;
+  background: var(--paper);
+}
+
+/* ----- Status bar ----- */
+.statusbar {
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper-2);
+  font: 500 11px/1 var(--mono);
+  color: var(--ink-4);
+  letter-spacing: 0.02em;
+}
+.statusbar .sp {
+  flex: 1;
+}
+.statusbar .live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #69a05a;
+  margin-right: 6px;
+  box-shadow: 0 0 0 0 rgba(105, 160, 90, 0.6);
+  animation: wb-pulse 1.8s ease-out infinite;
+}
+@keyframes wb-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(105, 160, 90, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(105, 160, 90, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(105, 160, 90, 0);
+  }
+}
+
+/* ----- Page hero ----- */
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 48px 56px;
+}
+.page.wide {
+  max-width: 1200px;
+  padding: 36px 40px;
+}
+.page-header {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+}
+.page-eyebrow {
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.page-title {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.page-title em {
+  font-style: italic;
+  color: var(--accent);
+}
+.page-sub {
+  margin-top: 10px;
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  max-width: 520px;
+}
+
+/* ----- Buttons ----- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 500 13px/1 var(--sans);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    transform 0.06s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--paper-3);
+  border-color: var(--ink-4);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn.primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.btn.primary:hover {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.btn.ghost:hover {
+  background: var(--paper-2);
+}
+.btn.accent {
+  background: var(--accent);
+  color: #fff8ec;
+  border-color: var(--accent);
+}
+.btn.accent:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+}
+.btn.sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ----- Inputs ----- */
+.input,
+input.input,
+textarea.input,
+select.input {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 13px/1.4 var(--sans);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  width: 100%;
+  outline: none;
+}
+.input:focus,
+input.input:focus,
+textarea.input:focus,
+select.input:focus {
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+/* ----- Chips / pills ----- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 11px/1 var(--sans);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--paper-3);
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.chip.known .dot {
+  background: var(--ink-3);
+}
+.chip.learning {
+  background: var(--learning-bg);
+  color: var(--learning-ink);
+  border-color: color-mix(in oklab, var(--learning-line) 60%, var(--rule));
+}
+.chip.learning .dot {
+  background: var(--learning-line);
+}
+.chip.unknown {
+  background: var(--unknown-bg);
+  color: var(--unknown-ink);
+  border-color: color-mix(in oklab, var(--unknown-line) 60%, var(--rule));
+}
+.chip.unknown .dot {
+  background: var(--unknown-line);
+}
+.chip.review {
+  background: var(--review-bg);
+  color: var(--review-ink);
+  border-color: color-mix(in oklab, var(--review-line) 60%, var(--rule));
+}
+.chip.review .dot {
+  background: var(--review-line);
+}
+.chip.sweet {
+  background: var(--sweet-bg);
+  color: var(--sweet-ink);
+  border-color: color-mix(in oklab, var(--sweet-line) 50%, var(--rule));
+}
+.chip.sweet .dot {
+  background: var(--sweet-line);
+}
+.chip.outside {
+  background: var(--outside-bg);
+  color: var(--outside-ink);
+  border-color: color-mix(in oklab, var(--outside-line) 50%, var(--rule));
+}
+.chip.outside .dot {
+  background: var(--outside-line);
+}
+
+/* ----- Tabs (segmented) ----- */
+.tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 7px 12px;
+  cursor: pointer;
+  font: 500 13px/1 var(--sans);
+  color: var(--ink-3);
+  border-radius: 6px;
+}
+.tab:hover {
+  color: var(--ink);
+  background: var(--paper-2);
+}
+.tab.active {
+  color: var(--ink);
+  background: var(--paper-3);
+  font-weight: 600;
+}
+
+/* ----- Cards ----- */
+.card {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+.card.sunken {
+  background: var(--paper-2);
+}
+
+/* ----- Marginalia layout ----- */
+.with-margin {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 40px;
+}
+
+/* ----- Generic helpers ----- */
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.gap-4 {
+  gap: 4px;
+}
+.gap-6 {
+  gap: 6px;
+}
+.gap-8 {
+  gap: 8px;
+}
+.gap-10 {
+  gap: 10px;
+}
+.gap-12 {
+  gap: 12px;
+}
+.gap-16 {
+  gap: 16px;
+}
+.gap-20 {
+  gap: 20px;
+}
+.gap-24 {
+  gap: 24px;
+}
+.grow {
+  flex: 1;
+}
+
+/* ----- Mini bar component ----- */
+.ratiobar {
+  height: 4px;
+  width: 100%;
+  background: var(--paper-3);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.ratiobar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.ratiobar .sweet {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  background: rgba(110, 138, 76, 0.25);
+  border-left: 1px dashed #6e8a4c;
+  border-right: 1px dashed #6e8a4c;
+}
+
+/* ----- Word cards (popovers) ----- */
+.wordcard {
+  position: absolute;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-2);
+  width: 320px;
+  z-index: 50;
+}
+
+/* ----- Word states (reader / inline) ----- */
+.word {
+  transition:
+    background 0.12s,
+    color 0.12s;
+  padding: 1px 0;
+  border-radius: 3px;
+  cursor: default;
+}
+.word.learning {
+  background: var(--learning-bg);
+  color: var(--learning-ink);
+  box-shadow: inset 0 -1px 0 var(--learning-line);
+}
+.word.unknown {
+  background: var(--unknown-bg);
+  color: var(--unknown-ink);
+  box-shadow: inset 0 -1px 0 var(--unknown-line);
+  cursor: pointer;
+}
+.word.unknown:hover {
+  filter: brightness(0.96);
+}
+.word.review {
+  background: var(--review-bg);
+  color: var(--review-ink);
+  box-shadow: inset 0 -1px 0 var(--review-line);
+}
+
+/* ----- Tiptap word-highlight decorations: re-skin onto editorial palette ----- */
+.wb-word--known {
+  /* inherit body colour */
+}
+.wb-word--learning {
+  background: var(--learning-bg);
+  color: var(--learning-ink);
+  box-shadow: inset 0 -1px 0 var(--learning-line);
+  border-radius: 3px;
   padding: 0 2px;
 }
-
-html.dark .wb-word--unknown {
-  background: rgba(129, 140, 248, 0.22);
+.wb-word--unknown {
+  background: var(--unknown-bg);
+  color: var(--unknown-ink);
+  box-shadow: inset 0 -1px 0 var(--unknown-line);
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
 }
 
 /* Synonym bracket span — Writing Train rewrite renderer */
 .wb-synonym-span {
-  background: rgba(16, 185, 129, 0.16);
+  background: var(--sweet-bg);
+  color: var(--sweet-ink);
   border-radius: 3px;
-  cursor: pointer;
   padding: 0 2px;
-  color: #047857;
   font-style: italic;
-}
-
-html.dark .wb-synonym-span {
-  background: rgba(52, 211, 153, 0.22);
-  color: #6ee7b7;
+  cursor: pointer;
 }
 
 /* Diff render */
 .wb-diff-insert {
-  background: rgba(34, 197, 94, 0.18);
-  color: #166534;
+  background: var(--sweet-bg);
+  color: var(--sweet-ink);
   border-radius: 2px;
   padding: 0 1px;
 }
-html.dark .wb-diff-insert {
-  background: rgba(74, 222, 128, 0.22);
-  color: #bbf7d0;
-}
 .wb-diff-delete {
-  background: rgba(248, 113, 113, 0.16);
-  color: #991b1b;
+  background: var(--outside-bg);
+  color: var(--outside-ink);
   text-decoration: line-through;
   border-radius: 2px;
   padding: 0 1px;
 }
-html.dark .wb-diff-delete {
-  background: rgba(248, 113, 113, 0.22);
-  color: #fecaca;
+
+/* ----- Hide focus rings except keyboard ----- */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* ----- Backwards-compat: legacy `html.dark` selector still applied by
+   providers.tsx mirrors `[data-theme=dark]`. ----- */
+html.dark {
+  color-scheme: dark;
+}
+
+/* ----- AntD interop: nudge a few stock components onto the paper palette
+   so they don't fight the editorial chrome we wrap them in. ----- */
+.ant-modal .ant-modal-content,
+.ant-drawer .ant-drawer-content,
+.ant-popover-inner,
+.ant-tooltip-inner {
+  font-family: var(--sans);
+}
+.ant-typography {
+  color: inherit;
 }
