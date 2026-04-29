@@ -1,7 +1,7 @@
 {
   "name": "WordBrain",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Local-first English vocabulary builder with word-network graphs and FSRS review",
   "author": "Peilin Wu",
   "license": "MIT",
