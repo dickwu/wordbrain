@@ -231,6 +231,10 @@ export async function addToSrs(lemma: string): Promise<AddToSrsOutcome> {
   return invoke<AddToSrsOutcome>('add_to_srs', { lemma });
 }
 
+export async function isInSrs(lemma: string): Promise<boolean> {
+  return invoke<boolean>('is_in_srs', { lemma });
+}
+
 export async function listDueSrs(nowOverride?: number): Promise<DueCardIpc[]> {
   return invoke<DueCardIpc[]>('list_due_srs', { nowOverride: nowOverride ?? null });
 }

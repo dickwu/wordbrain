@@ -42,12 +42,11 @@
 #
 # On every published GitHub release, the homebrew workflow downloads the macOS
 # universal DMG, computes its sha256, and writes `Casks/wordbrain.rb` into the
-# shared tap repo at dickwu/homebrew-tap (same tap r2 uses). Users install with:
+# shared tap repo at dickwu/homebrew-tap. Users install with:
 #
 #   brew install dickwu/tap/wordbrain
 #
-# Prerequisites (one-time): the tap repo dickwu/homebrew-tap already exists
-# from the r2 project. Create a fine-grained PAT scoped to that tap repo,
+# Prerequisites (one-time): create a fine-grained PAT scoped to the tap repo,
 # Contents: Read and write, and save as the `HOMEBREW_TAP_TOKEN` secret on
 # dickwu/wordbrain.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -120,7 +119,7 @@ verify_signing_env() {
 build_macos() {
   log "Building macOS (dmg + updater tarball)"
   # Drop the dev-connector capability + feature; local release builds should
-  # match the CI release.yml path (no xcap / libspa / aws-sdk-s3).
+  # match the CI release.yml path (no dev connector native dependencies).
   rm -f src-tauri/capabilities/dev-connector.json
   bun run tauri build --target universal-apple-darwin
   git checkout -- src-tauri/capabilities/dev-connector.json 2>/dev/null || true

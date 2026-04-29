@@ -59,7 +59,6 @@ type Phase = 'idle' | 'loading_seed' | 'ready' | 'error';
 interface StoryLookup {
   lemma: string;
   surface: string;
-  contextSentence: string;
 }
 
 interface StoryViewProps {
@@ -316,9 +315,8 @@ export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
     setLookup({
       lemma: lemmatize(normalized),
       surface,
-      contextSentence: storyTextForContext(story, blanks),
     });
-  }, [story, blanks]);
+  }, [story]);
 
   if (phase === 'loading_seed') {
     return (
@@ -470,7 +468,6 @@ export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
               visible={true}
               initialQuery={lookup.lemma}
               surface={lookup.surface}
-              contextSentence={lookup.contextSentence}
               autoSearch={true}
               onClose={() => setLookup(null)}
               onShowLinked={onDrillLemma}
@@ -792,15 +789,4 @@ function makeBlankState(story: StoryMaterialIpc): BlankState[] {
     explanation: null,
     loadingExplanation: false,
   }));
-}
-
-function storyTextForContext(story: StoryMaterialIpc, states: BlankState[]): string {
-  return story.story_text.replace(/\{\{(\d+)\}\}/g, (_match, rawIndex: string) => {
-    const idx = Math.max(0, parseInt(rawIndex, 10) - 1);
-    const blank = story.blanks[idx];
-    const state = states[idx];
-    if (state?.picked) return state.picked;
-    if (!blank) return '';
-    return blank.options[blank.correct_index] ?? '';
-  });
 }

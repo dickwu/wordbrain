@@ -43,9 +43,8 @@ persistence loop.
 
 ### Phase 0 — Fork & rename baseline
 
-Forked the Tauri + Next.js skeleton from the internal R2 client, stripped every S3 / R2 /
-MinIO / RustFS code path, and renamed every identifier to WordBrain (bundle id
-`com.lifefarmer.wordbrain`).
+Forked the Tauri + Next.js skeleton from an internal storage client, stripped the file-transfer
+surfaces, and renamed every identifier to WordBrain (bundle id `com.lifefarmer.wordbrain`).
 
 ### Phase 1 — Core reading loop
 
@@ -59,11 +58,11 @@ SUBTLEX-US frequency list bundled; first-launch wizard with cutoff slider; Rust 
 `seed_known_from_frequency` + `get_all_known_lemmas`; in-memory known-set hydrated from SQLite on
 startup. Mark-known persists across restarts.
 
-### Phase 2 — Three-tier dictionary stack
+### Phase 2 — Dictionary API lookup
 
-Bundled ECDICT (Apache-2.0) offline dictionary; Youdao / DeepL online lookup with translation
-caching; on-demand AI gloss via Ollama / OpenAI / Anthropic. API keys stored encrypted in
-`tauri-plugin-stronghold`. Frontend `DictionaryFloat` with a tiered resolver.
+Private Dictionary API settings and lookup UI. The renderer stores only server configuration, while
+the API key is encrypted in `tauri-plugin-stronghold` and used by Rust IPC commands. Frontend
+`DictionaryFloat` renders API results through the shared dictionary modal.
 
 ### Phase 3 — Material library + bipartite edges + i+1 recommender
 

@@ -162,98 +162,7 @@ pub async fn apply(conn: &Connection) -> DbResult<()> {
     )
     .await?;
 
-    // 4.6 Bundled offline dictionary
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS dictionary_entries (
-          lemma          TEXT NOT NULL,
-          pos            TEXT,
-          ipa            TEXT,
-          definitions_zh TEXT,
-          definitions_en TEXT,
-          examples       TEXT,
-          source         TEXT NOT NULL,
-          PRIMARY KEY (lemma, pos, source)
-        );
-        CREATE INDEX IF NOT EXISTS idx_dict_lemma ON dictionary_entries(lemma);
-        ",
-    )
-    .await?;
-
-    // 4.7 Online + AI lookup cache
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS word_translations_cache (
-          lemma          TEXT NOT NULL,
-          provider       TEXT NOT NULL,
-          context_hash   TEXT NOT NULL DEFAULT '',
-          translation_zh TEXT NOT NULL,
-          example        TEXT,
-          raw_response   TEXT,
-          cached_at      INTEGER NOT NULL,
-          PRIMARY KEY (lemma, provider, context_hash)
-        );
-        ",
-    )
-    .await?;
-
-    // 4.7b User-imported MDict dictionaries. WordBrain stores the MDX index in
-    // the local SQLite DB so lookups do not depend on the original folder after
-    // import. Small page assets such as CSS are kept beside the MDX blob.
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS custom_dictionaries (
-          id          INTEGER PRIMARY KEY AUTOINCREMENT,
-          name        TEXT    NOT NULL,
-          source_path TEXT    NOT NULL UNIQUE,
-          mdx_path    TEXT    NOT NULL,
-          entry_count INTEGER NOT NULL,
-          imported_at INTEGER NOT NULL,
-          updated_at  INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_custom_dict_updated ON custom_dictionaries(updated_at);
-
-        CREATE TABLE IF NOT EXISTS custom_dictionary_files (
-          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
-          role          TEXT    NOT NULL,
-          file_name     TEXT    NOT NULL,
-          media_type    TEXT    NOT NULL,
-          content       BLOB    NOT NULL,
-          byte_size     INTEGER NOT NULL,
-          updated_at    INTEGER NOT NULL,
-          PRIMARY KEY (dictionary_id, role, file_name)
-        );
-        CREATE INDEX IF NOT EXISTS idx_custom_dict_files_dictionary
-          ON custom_dictionary_files(dictionary_id, role);
-
-        CREATE TABLE IF NOT EXISTS custom_dictionary_resource_archives (
-          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
-          file_name     TEXT    NOT NULL,
-          source_path   TEXT    NOT NULL,
-          cache_path    TEXT    NOT NULL,
-          byte_size     INTEGER NOT NULL,
-          updated_at    INTEGER NOT NULL,
-          PRIMARY KEY (dictionary_id, file_name)
-        );
-        CREATE INDEX IF NOT EXISTS idx_custom_dict_archives_dictionary
-          ON custom_dictionary_resource_archives(dictionary_id);
-
-        CREATE TABLE IF NOT EXISTS custom_dictionary_cloud_files (
-          dictionary_id INTEGER NOT NULL REFERENCES custom_dictionaries(id) ON DELETE CASCADE,
-          file_name     TEXT    NOT NULL,
-          media_type    TEXT    NOT NULL,
-          public_url    TEXT    NOT NULL,
-          byte_size     INTEGER NOT NULL,
-          updated_at    INTEGER NOT NULL,
-          PRIMARY KEY (dictionary_id, file_name)
-        );
-        CREATE INDEX IF NOT EXISTS idx_custom_dict_cloud_files_dictionary
-          ON custom_dictionary_cloud_files(dictionary_id);
-        ",
-    )
-    .await?;
-
-    // 4.8 Key-value settings
+    // 4.6 Key-value settings
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS settings (
@@ -265,7 +174,7 @@ pub async fn apply(conn: &Connection) -> DbResult<()> {
     )
     .await?;
 
-    // 4.9 Per-event log for the learning-loop usage counter. Every
+    // 4.7 Per-event log for the learning-loop usage counter. Every
     // `register_word_use` IPC call inserts one row here so the +1 stream
     // is auditable / replayable independent of the cumulative counter on
     // the words row. Surface enum is enforced via CHECK because this table

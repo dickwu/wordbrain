@@ -11,12 +11,12 @@ import {
   Select,
   Space,
   Spin,
-  Tabs,
   Tag,
   theme,
   Typography,
 } from 'antd';
 import {
+  ArrowLeftOutlined,
   CheckOutlined,
   LinkOutlined,
   PlusOutlined,
@@ -25,13 +25,13 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import {
-  listCustomDictionaries,
-  lookupCustomDictionary,
-  type CustomDictionary,
-  type CustomDictionaryLookupEntry,
-  type CustomDictionaryLookupResult,
+  listRemoteDictionaries,
+  lookupRemoteDictionary,
+  type DictionaryLookupEntry,
+  type DictionaryLookupResult,
+  type RemoteDictionary,
 } from '@/app/lib/dict';
-import { addToSrs, isTauri } from '@/app/lib/ipc';
+import { addToSrs, isInSrs, isTauri } from '@/app/lib/ipc';
 import {
   isLookupCandidate,
   normalizeLookupQuery,
@@ -39,7 +39,6 @@ import {
 } from '@/app/lib/lookup-history';
 import { refreshDueCount } from '@/app/stores/srsStore';
 import { looksLikeNameToken, useWordStore } from '@/app/stores/wordStore';
-import { AiTab, OfflineTab, OnlineTab } from './LookupTabs';
 
 const { Text, Title } = Typography;
 
@@ -50,8 +49,6 @@ interface WordLookupModalProps {
   initialQuery: string;
   /** Original surface form when it differs from the lookup key. */
   surface?: string;
-  /** Sentence containing the word — fed to lookup_ai for contextual gloss. */
-  contextSentence?: string;
   /** When true and `initialQuery` is non-empty, fire `runLookup` once on mount. */
   autoSearch?: boolean;
   onClose: () => void;
@@ -59,11 +56,23 @@ interface WordLookupModalProps {
   onShowLinked?: (lemma: string) => void;
 }
 
+interface LookupSnapshot {
+  query: string;
+  selectedDictionarySlug: string | null;
+  result: DictionaryLookupResult;
+  activeEntryIndex: number;
+}
+
+interface DictionaryNavigateMessage {
+  type: 'dictionary-api:navigate';
+  query: string;
+  dictionarySlug?: string;
+}
+
 export function WordLookupModal({
   visible,
   initialQuery,
   surface,
-  contextSentence,
   autoSearch = false,
   onClose,
   onOpenSettings,
@@ -71,37 +80,48 @@ export function WordLookupModal({
 }: WordLookupModalProps) {
   const { message } = AntApp.useApp();
   const [query, setQuery] = useState(initialQuery);
-  const [selectedDictionaryId, setSelectedDictionaryId] = useState<number | null>(null);
-  const [dictionaries, setDictionaries] = useState<CustomDictionary[]>([]);
-  const [result, setResult] = useState<CustomDictionaryLookupResult | null>(null);
+  const [selectedDictionarySlug, setSelectedDictionarySlug] = useState<string | null>(null);
+  const [dictionaries, setDictionaries] = useState<RemoteDictionary[]>([]);
+  const [result, setResult] = useState<DictionaryLookupResult | null>(null);
   const [activeEntryIndex, setActiveEntryIndex] = useState(0);
+  const [entryHistory, setEntryHistory] = useState<LookupSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDictionaries, setLoadingDictionaries] = useState(false);
   const [addingToSrs, setAddingToSrs] = useState(false);
+  const [srsStatus, setSrsStatus] = useState<{ lemma: string; inSrs: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const ranAutoRef = useRef(false);
 
   const dictionaryOptions = useMemo(
     () => [
-      { value: 0, label: 'All dictionaries' },
-      ...dictionaries.map((dict) => ({ value: dict.id, label: dict.name })),
+      { value: 'all', label: 'All API dictionaries' },
+      ...dictionaries.map((dict) => ({
+        value: dict.slug,
+        label: dict.name,
+      })),
     ],
     [dictionaries]
   );
 
   const activeEntry = result?.entries[activeEntryIndex] ?? null;
-  const lemmaForTabs = normalizeLookupQuery(query);
-  const actionLemma = lemmaForTabs || normalizeLookupQuery(initialQuery);
+  const lookupLemma = normalizeLookupQuery(query);
+  const actionLemma = lookupLemma || normalizeLookupQuery(initialQuery);
   const surfaceLabel = surface?.trim() || query.trim() || actionLemma;
   const canIgnoreName = Boolean(actionLemma && surfaceLabel && looksLikeNameToken(surfaceLabel));
+  const srsStatusMatchesAction = srsStatus?.lemma === actionLemma;
+  const actionLemmaInSrs = Boolean(srsStatusMatchesAction && srsStatus?.inSrs);
+  const showAddToSrs =
+    Boolean(actionLemma) && (!isTauri() || (srsStatusMatchesAction && !actionLemmaInSrs));
 
   useEffect(() => {
     if (!isTauri()) return;
     let cancelled = false;
     setLoadingDictionaries(true);
-    listCustomDictionaries()
+    listRemoteDictionaries()
       .then((items) => {
-        if (!cancelled) setDictionaries(items);
+        if (!cancelled) {
+          setDictionaries(items);
+        }
       })
       .catch((e) => {
         if (!cancelled) setErr(String(e));
@@ -114,16 +134,66 @@ export function WordLookupModal({
     };
   }, []);
 
-  const runLookup = async (overrideQuery?: string) => {
+  useEffect(() => {
+    if (!visible || !actionLemma) {
+      setSrsStatus(null);
+      return;
+    }
+    if (!isTauri()) {
+      setSrsStatus({ lemma: actionLemma, inSrs: false });
+      return;
+    }
+
+    let cancelled = false;
+    setSrsStatus(null);
+    isInSrs(actionLemma)
+      .then((inSrs) => {
+        if (!cancelled) setSrsStatus({ lemma: actionLemma, inSrs });
+      })
+      .catch((e) => {
+        console.warn('[wordbrain] is_in_srs failed', e);
+        if (!cancelled) setSrsStatus({ lemma: actionLemma, inSrs: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, actionLemma]);
+
+  const runLookup = async (
+    overrideQuery?: string,
+    opts?: { dictionarySlug?: string | null; pushHistory?: boolean }
+  ) => {
     const trimmed = (overrideQuery ?? query).trim();
     if (!trimmed) return;
     recordLookupHistory(trimmed);
+    const dictionarySlug =
+      opts && Object.prototype.hasOwnProperty.call(opts, 'dictionarySlug')
+        ? (opts.dictionarySlug ?? null)
+        : selectedDictionarySlug;
+    if (opts?.pushHistory && result) {
+      setEntryHistory((items) =>
+        [
+          ...items,
+          {
+            query,
+            selectedDictionarySlug,
+            result,
+            activeEntryIndex,
+          },
+        ].slice(-20)
+      );
+    }
+    setQuery(trimmed);
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'dictionarySlug')) {
+      setSelectedDictionarySlug(dictionarySlug);
+    }
     setLoading(true);
     setErr(null);
     try {
-      const next = await lookupCustomDictionary(trimmed, {
-        dictionaryId: selectedDictionaryId,
-        limit: 4,
+      const limit = 4;
+      const next = await lookupRemoteDictionary(trimmed, {
+        dictionarySlug,
+        limit,
       });
       setResult(next);
       setActiveEntryIndex(0);
@@ -134,7 +204,7 @@ export function WordLookupModal({
     }
   };
 
-  // Auto-fire the custom-dictionary lookup once the dictionaries list is
+  // Auto-fire the API dictionary lookup once the dictionaries list is
   // loaded, when caller asked for it (double-click / clipboard path). Guarded
   // so we never refire if the user later edits the query.
   useEffect(() => {
@@ -178,6 +248,7 @@ export function WordLookupModal({
         } else {
           message.success(`Added "${actionLemma}" to the review queue.`);
         }
+        setSrsStatus({ lemma: actionLemma, inSrs: true });
         await refreshDueCount();
       }
     } catch (e) {
@@ -193,58 +264,25 @@ export function WordLookupModal({
     onClose();
   };
 
-  const tabItems = [
-    {
-      key: 'custom',
-      label: '词典',
-      children: (
-        <CustomDictionaryPane
-          loadingDictionaries={loadingDictionaries}
-          dictionaries={dictionaries}
-          loading={loading}
-          result={result}
-          activeEntry={activeEntry}
-          activeEntryIndex={activeEntryIndex}
-          err={err}
-          onEntryChange={setActiveEntryIndex}
-          onOpenSettings={onOpenSettings ? openSettings : undefined}
-        />
-      ),
-    },
-    {
-      key: 'offline',
-      label: '离线',
-      children: lemmaForTabs ? (
-        <OfflineTab lemma={lemmaForTabs} />
-      ) : (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Enter a single English word to look it up offline.
-        </Text>
-      ),
-    },
-    {
-      key: 'online',
-      label: '在线',
-      children: lemmaForTabs ? (
-        <OnlineTab lemma={lemmaForTabs} />
-      ) : (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Enter a single English word to call Youdao / DeepL.
-        </Text>
-      ),
-    },
-    {
-      key: 'ai',
-      label: '智能',
-      children: lemmaForTabs ? (
-        <AiTab lemma={lemmaForTabs} contextSentence={contextSentence ?? lemmaForTabs} />
-      ) : (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Enter a single English word for an AI gloss.
-        </Text>
-      ),
-    },
-  ];
+  const navigateLinkedEntry = (nextQuery: string, dictionarySlug?: string) => {
+    const trimmed = nextQuery.trim();
+    if (!trimmed) return;
+    void runLookup(trimmed, {
+      dictionarySlug: dictionarySlug || selectedDictionarySlug,
+      pushHistory: true,
+    });
+  };
+
+  const goBack = () => {
+    const previous = entryHistory[entryHistory.length - 1];
+    if (!previous) return;
+    setEntryHistory((items) => items.slice(0, -1));
+    setQuery(previous.query);
+    setSelectedDictionarySlug(previous.selectedDictionarySlug);
+    setResult(previous.result);
+    setActiveEntryIndex(previous.activeEntryIndex);
+    setErr(null);
+  };
 
   return (
     <Modal
@@ -268,7 +306,7 @@ export function WordLookupModal({
           <Alert
             type="info"
             showIcon
-            message="Dictionary lookup is running in browser preview; live dictionary providers require the Tauri shell."
+            message="Dictionary lookup is running in browser preview; the Dictionary API requires the Tauri shell."
           />
         )}
 
@@ -281,10 +319,10 @@ export function WordLookupModal({
         >
           <Select
             size="small"
-            value={selectedDictionaryId ?? 0}
+            value={selectedDictionarySlug ?? 'all'}
             style={{ width: '100%' }}
             options={dictionaryOptions}
-            onChange={(value) => setSelectedDictionaryId(value === 0 ? null : value)}
+            onChange={(value) => setSelectedDictionarySlug(value === 'all' ? null : value)}
           />
           <Space.Compact style={{ width: '100%' }}>
             <Input
@@ -307,6 +345,11 @@ export function WordLookupModal({
         </div>
 
         <Space wrap>
+          {entryHistory.length > 0 && (
+            <Button icon={<ArrowLeftOutlined />} onClick={goBack}>
+              Back
+            </Button>
+          )}
           <Button
             type="primary"
             icon={<CheckOutlined />}
@@ -320,14 +363,16 @@ export function WordLookupModal({
               Ignore name
             </Button>
           )}
-          <Button
-            icon={<PlusOutlined />}
-            loading={addingToSrs}
-            disabled={!actionLemma}
-            onClick={handleAddToSrs}
-          >
-            Add to SRS
-          </Button>
+          {showAddToSrs && (
+            <Button
+              icon={<PlusOutlined />}
+              loading={addingToSrs}
+              disabled={!actionLemma}
+              onClick={handleAddToSrs}
+            >
+              Add to SRS
+            </Button>
+          )}
           {onShowLinked && (
             <Button icon={<LinkOutlined />} disabled={!actionLemma} onClick={showLinked}>
               Linked docs
@@ -335,25 +380,37 @@ export function WordLookupModal({
           )}
         </Space>
 
-        <Tabs size="small" defaultActiveKey="custom" items={tabItems} />
+        <DictionaryApiPane
+          loadingDictionaries={loadingDictionaries}
+          dictionaries={dictionaries}
+          loading={loading}
+          result={result}
+          activeEntry={activeEntry}
+          activeEntryIndex={activeEntryIndex}
+          err={err}
+          onEntryChange={setActiveEntryIndex}
+          onNavigateEntry={navigateLinkedEntry}
+          onOpenSettings={onOpenSettings ? openSettings : undefined}
+        />
       </Space>
     </Modal>
   );
 }
 
-interface CustomDictionaryPaneProps {
+interface DictionaryApiPaneProps {
   loadingDictionaries: boolean;
-  dictionaries: CustomDictionary[];
+  dictionaries: RemoteDictionary[];
   loading: boolean;
-  result: CustomDictionaryLookupResult | null;
-  activeEntry: CustomDictionaryLookupEntry | null;
+  result: DictionaryLookupResult | null;
+  activeEntry: DictionaryLookupEntry | null;
   activeEntryIndex: number;
   err: string | null;
   onEntryChange: (index: number) => void;
+  onNavigateEntry: (query: string, dictionarySlug?: string) => void;
   onOpenSettings?: () => void;
 }
 
-function CustomDictionaryPane({
+function DictionaryApiPane({
   loadingDictionaries,
   dictionaries,
   loading,
@@ -362,12 +419,13 @@ function CustomDictionaryPane({
   activeEntryIndex,
   err,
   onEntryChange,
+  onNavigateEntry,
   onOpenSettings,
-}: CustomDictionaryPaneProps) {
+}: DictionaryApiPaneProps) {
   if (loadingDictionaries) return <Spin size="small" />;
   if (dictionaries.length === 0) {
     return (
-      <Empty description="No dictionaries imported">
+      <Empty description="No API dictionaries configured">
         {onOpenSettings && (
           <Button icon={<SettingOutlined />} onClick={onOpenSettings}>
             Settings
@@ -399,6 +457,7 @@ function CustomDictionaryPane({
           activeEntryIndex={activeEntryIndex}
           elapsedMs={result.elapsed_ms}
           onEntryChange={onEntryChange}
+          onNavigateEntry={onNavigateEntry}
         />
       )}
     </div>
@@ -411,14 +470,28 @@ function DictionaryPage({
   activeEntryIndex,
   elapsedMs,
   onEntryChange,
+  onNavigateEntry,
 }: {
-  entries: CustomDictionaryLookupEntry[];
-  activeEntry: CustomDictionaryLookupEntry;
+  entries: DictionaryLookupEntry[];
+  activeEntry: DictionaryLookupEntry;
   activeEntryIndex: number;
   elapsedMs: number;
   onEntryChange: (index: number) => void;
+  onNavigateEntry: (query: string, dictionarySlug?: string) => void;
 }) {
   const { token } = theme.useToken();
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (!isDictionaryNavigateMessage(event.data)) return;
+      onNavigateEntry(event.data.query, event.data.dictionarySlug);
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onNavigateEntry]);
+
   return (
     <div
       style={{
@@ -488,9 +561,11 @@ function DictionaryPage({
         </div>
 
         <iframe
+          ref={iframeRef}
           title={`${activeEntry.dictionary_name}: ${activeEntry.headword}`}
           srcDoc={activeEntry.definition_page_html || activeEntry.definition_html}
-          sandbox=""
+          sandbox="allow-scripts"
+          allow="autoplay"
           style={{
             width: '100%',
             height: 'min(64vh, 640px)',
@@ -502,5 +577,16 @@ function DictionaryPage({
         />
       </div>
     </div>
+  );
+}
+
+function isDictionaryNavigateMessage(value: unknown): value is DictionaryNavigateMessage {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  return (
+    data.type === 'dictionary-api:navigate' &&
+    typeof data.query === 'string' &&
+    data.query.trim().length > 0 &&
+    (data.dictionarySlug === undefined || typeof data.dictionarySlug === 'string')
   );
 }

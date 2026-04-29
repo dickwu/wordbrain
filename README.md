@@ -53,12 +53,9 @@ See [Development](#development) for the full loop.
 
 - **Known-word highlighting** — a custom Tiptap extension paints every token against an in-memory
   `Set<string>` of known lemmas. Pasting a 10 KB article highlights in well under 500 ms.
-- **Three-tier dictionary stack** —
-  1. Bundled **ECDICT** (offline, primary, ≈ 700 k entries)
-  2. **Youdao / DeepL** online lookup (cached in `word_translations_cache`)
-  3. On-demand **AI gloss** (Ollama local, or OpenAI / Anthropic if you bring your own key)
-
-  API keys are stored encrypted via `tauri-plugin-stronghold` and never leave Rust.
+- **Private Dictionary API** — word lookup and SRS reveal use your configured dictionary API
+  server. The server URL is stored in settings, while the API key is encrypted via
+  `tauri-plugin-stronghold` and never leaves Rust.
 
 - **Material library + Krashen i+1 recommender** — every document you import is scored by its
   ratio of unknown lemmas; the library surfaces your next best doc within the 2–5 % sweet spot.
@@ -73,7 +70,7 @@ See [Development](#development) for the full loop.
 - **Words manager** — a dedicated virtualised table lists every known lemma with source, frequency
   rank, exposure count, and user notes. Bulk unmark, set state, or add notes per word.
 - **Offline-first SQLite** — a single `wordbrain.db` file holds every lemma, document, exposure
-  edge, FSRS schedule, and dictionary cache. Bundle id `com.lifefarmer.wordbrain`.
+  edge, and FSRS schedule. Bundle id `com.lifefarmer.wordbrain`.
 - **Auto-updates** — the status bar shows the current version and silently checks GitHub every
   30 minutes. Toggle this off in Settings → General if you prefer manual checks.
 
@@ -90,24 +87,25 @@ A single SQLite file per platform (plus the encrypted Stronghold vault for API k
 - Windows: `%APPDATA%\com.lifefarmer.wordbrain\wordbrain.db`
 - Linux: `~/.local/share/com.lifefarmer.wordbrain/wordbrain.db`
 
-Everything lives in that single file — back it up, `scp` it between machines, or export it to JSON
-from Settings → Dictionary for a plain-text dump. WordBrain never phones home.
+Everything lives in that single file, except encrypted API secrets in the Stronghold vault. Back it
+up or `scp` it between machines. WordBrain never phones home beyond the dictionary API server you
+configure.
 
 ## Tech stack
 
-| Layer         | Choice                                                                   |
-| ------------- | ------------------------------------------------------------------------ |
-| Desktop shell | Tauri v2 (Rust)                                                          |
-| Frontend      | Next.js 16 (static export), React 19, Ant Design 6, Tailwind CSS 4       |
-| Editor        | Tiptap 3 + a custom ProseMirror decoration extension                     |
-| State         | Zustand (sync) + TanStack React Query (async IPC)                        |
-| Database      | Turso SQLite (Rust-native, embedded)                                     |
-| Tokenizer     | `wink-lemmatizer` (runs in the renderer, no IPC round-trip)              |
-| Dictionary    | ECDICT (offline) · Youdao / DeepL (online) · Ollama / OpenAI / Anthropic |
-| Spaced rep    | `ts-fsrs`                                                                |
-| Graph         | cytoscape + `react-cytoscapejs` + `cytoscape-fcose`                      |
-| Secrets       | `tauri-plugin-stronghold`                                                |
-| Auto-update   | `tauri-plugin-updater` (signed `latest.json` from GitHub Releases)       |
+| Layer         | Choice                                                             |
+| ------------- | ------------------------------------------------------------------ |
+| Desktop shell | Tauri v2 (Rust)                                                    |
+| Frontend      | Next.js 16 (static export), React 19, Ant Design 6, Tailwind CSS 4 |
+| Editor        | Tiptap 3 + a custom ProseMirror decoration extension               |
+| State         | Zustand (sync) + TanStack React Query (async IPC)                  |
+| Database      | Turso SQLite (Rust-native, embedded)                               |
+| Tokenizer     | `wink-lemmatizer` (runs in the renderer, no IPC round-trip)        |
+| Dictionary    | Private Dictionary API                                             |
+| Spaced rep    | `ts-fsrs`                                                          |
+| Graph         | cytoscape + `react-cytoscapejs` + `cytoscape-fcose`                |
+| Secrets       | `tauri-plugin-stronghold`                                          |
+| Auto-update   | `tauri-plugin-updater` (signed `latest.json` from GitHub Releases) |
 
 ## Development
 

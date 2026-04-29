@@ -288,7 +288,6 @@ export function WritingView({ windowDays = WINDOW_DAYS_DEFAULT }: WritingViewPro
                     visible={true}
                     initialQuery={wordLookup.lemma}
                     surface={wordLookup.surface}
-                    contextSentence={editor.getText()}
                     autoSearch={true}
                     onClose={() => setWordLookup(null)}
                   />

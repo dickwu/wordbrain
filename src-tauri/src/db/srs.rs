@@ -176,6 +176,31 @@ pub async fn add_to_srs(lemma: &str) -> DbResult<AddToSrsOutcome> {
     add_to_srs_on_conn(&conn, lemma, now_ms()).await
 }
 
+/// Return whether `lemma` already has an SRS schedule row.
+pub async fn is_in_srs_on_conn(conn: &Connection, lemma: &str) -> DbResult<bool> {
+    let lemma = lemma.trim();
+    if lemma.is_empty() {
+        return Ok(false);
+    }
+
+    let mut rows = conn
+        .query(
+            "SELECT 1 \
+               FROM srs_schedule s \
+               JOIN words w ON w.id = s.word_id \
+              WHERE w.lemma = ?1 COLLATE NOCASE \
+              LIMIT 1",
+            turso::params![lemma],
+        )
+        .await?;
+    Ok(rows.next().await?.is_some())
+}
+
+pub async fn is_in_srs(lemma: &str) -> DbResult<bool> {
+    let conn = get_connection()?.lock().await;
+    is_in_srs_on_conn(&conn, lemma).await
+}
+
 // ---------------------------------------------------------------------------
 // list_due / count_due
 // ---------------------------------------------------------------------------

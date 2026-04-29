@@ -507,7 +507,6 @@ export default function Home() {
           key={`${historyLookup.word}-${historyLookup.nonce}`}
           visible={true}
           initialQuery={historyLookup.word}
-          contextSentence={historyLookup.word}
           autoSearch={true}
           onClose={() => setHistoryLookup(null)}
           onOpenSettings={() => setView('settings')}

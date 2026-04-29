@@ -30,13 +30,13 @@ const AI_KEY_PROVIDERS: ProviderKeyDef[] = [
   {
     id: 'openai',
     label: 'OpenAI',
-    hint: 'API key (sk-...) for contextual AI gloss and HTTP fallback.',
+    hint: 'API key (sk-...) for the optional HTTP fallback.',
     placeholder: 'sk-...',
   },
   {
     id: 'anthropic',
     label: 'Anthropic',
-    hint: 'API key (sk-ant-...) for Claude-powered gloss.',
+    hint: 'API key (sk-ant-...) for the optional HTTP fallback.',
     placeholder: 'sk-ant-...',
   },
   {
@@ -217,8 +217,8 @@ export function AiPanel() {
       }
     >
       <Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Story Review and Writing Train use local CLI providers first. API keys power AI dictionary
-        glosses and the optional HTTP fallback.
+        Story Review and Writing Train use local CLI providers first. API keys power the optional
+        HTTP fallback.
       </Paragraph>
 
       {!isTauri() && (
@@ -318,7 +318,7 @@ export function AiPanel() {
           <Space orientation="vertical" size={2}>
             <Text strong>Default API model</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Used by the AI dictionary gloss and HTTP fallback path.
+              Used by the optional HTTP fallback path.
             </Text>
           </Space>
           <Space.Compact>

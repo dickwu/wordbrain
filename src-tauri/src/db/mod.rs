@@ -4,9 +4,6 @@
 //! connection is opened once on app start at
 //! `<app_data_dir>/wordbrain.db`; schema creation is idempotent.
 //!
-//! The offline ECDICT bundle lives in its own SQLite file (see [`dict`]) so
-//! we do not pay a 770k-row import on first launch.
-
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -15,9 +12,6 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 use turso::{Builder, Connection};
 
-pub mod cache;
-pub mod custom_dicts;
-pub mod dict;
 pub mod materials;
 pub mod names;
 pub mod network;

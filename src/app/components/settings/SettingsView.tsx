@@ -2,10 +2,8 @@
 
 import { Space } from 'antd';
 import { AiPanel } from '@/app/components/settings/AiPanel';
-import { ApiKeysPanel } from '@/app/components/settings/ApiKeysPanel';
-import { DictionarySettingsPanel } from '@/app/components/settings/DictionarySettingsPanel';
+import { DictionaryApiSettingsPanel } from '@/app/components/settings/DictionaryApiSettingsPanel';
 import { GeneralSettingsPanel } from '@/app/components/settings/GeneralSettingsPanel';
-import { UploadServerSettingsPanel } from '@/app/components/settings/UploadServerSettingsPanel';
 
 /**
  * Settings — editorial header on top, then the existing AntD panels stacked.
@@ -29,10 +27,8 @@ export function SettingsView() {
 
       <Space orientation="vertical" style={{ width: '100%' }} size={14}>
         <GeneralSettingsPanel />
-        <UploadServerSettingsPanel />
-        <DictionarySettingsPanel />
+        <DictionaryApiSettingsPanel />
         <AiPanel />
-        <ApiKeysPanel />
       </Space>
     </div>
   );

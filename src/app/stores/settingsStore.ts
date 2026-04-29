@@ -22,7 +22,7 @@ interface SettingsState {
    * regardless of this flag. */
   autoUpdateEnabled: boolean;
   setAutoUpdate: (v: boolean) => Promise<void>;
-  /** When true, AI calls fall back to the HTTP `lookup_ai` path after both
+  /** When true, AI calls fall back to the configured HTTP provider after both
    * CLI channels (`claude -p`, `codex exec`) fail. Off by default — the
    * learning loop is meant to stay local-first. */
   httpFallbackEnabled: boolean;

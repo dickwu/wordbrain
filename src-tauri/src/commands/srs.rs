@@ -19,6 +19,14 @@ pub async fn add_to_srs(lemma: String) -> Result<AddToSrsOutcome, String> {
         .map_err(|e| format!("add_to_srs: {e}"))
 }
 
+/// Check whether a lemma is already scheduled in FSRS.
+#[tauri::command]
+pub async fn is_in_srs(lemma: String) -> Result<bool, String> {
+    db::srs::is_in_srs(&lemma)
+        .await
+        .map_err(|e| format!("is_in_srs: {e}"))
+}
+
 /// List every card whose `due <= now_override || now()`. An explicit
 /// `now_override` lets integration tests drive the queue with a simulated
 /// clock without having to reach into the system time.

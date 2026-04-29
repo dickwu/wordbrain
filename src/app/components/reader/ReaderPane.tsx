@@ -21,29 +21,6 @@ interface ReaderPaneProps {
   onDrillLemma?: (lemma: string) => void;
 }
 
-/** Crude sentence chunker: grabs the period/question/exclamation-bounded slice
- * that contains the given surface form. Good enough to feed lookup_ai. */
-function extractSentence(text: string, surface: string): string {
-  const lower = text.toLowerCase();
-  const needle = surface.toLowerCase();
-  const idx = lower.indexOf(needle);
-  if (idx < 0) return surface;
-  const before = Math.max(
-    lower.lastIndexOf('.', idx),
-    lower.lastIndexOf('?', idx),
-    lower.lastIndexOf('!', idx),
-    lower.lastIndexOf('\n', idx)
-  );
-  const afterCandidates = [
-    lower.indexOf('.', idx + needle.length),
-    lower.indexOf('?', idx + needle.length),
-    lower.indexOf('!', idx + needle.length),
-    lower.indexOf('\n', idx + needle.length),
-  ].filter((n) => n > -1);
-  const after = afterCandidates.length ? Math.min(...afterCandidates) : text.length - 1;
-  return text.slice(before + 1, after + 1).trim();
-}
-
 export function ReaderPane({
   initialContent = '',
   placeholder = 'Paste or type English text here — unknown words will be highlighted as you go.',
@@ -117,7 +94,6 @@ export function ReaderPane({
           visible={true}
           initialQuery={lookup.lemma}
           surface={lookup.surface}
-          contextSentence={extractSentence(editor.getText(), lookup.surface)}
           autoSearch={true}
           onClose={() => setLookup(null)}
           onShowLinked={onDrillLemma}

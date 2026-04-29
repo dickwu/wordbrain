@@ -14,8 +14,8 @@ use turso::Builder;
 use wordbrain_lib::db::{
     schema,
     srs::{
-        add_to_srs_on_conn, apply_rating_on_conn, count_due_on_conn, list_due_on_conn,
-        SchedulingUpdate, DEFAULT_GRADUATION_REPS,
+        add_to_srs_on_conn, apply_rating_on_conn, count_due_on_conn, is_in_srs_on_conn,
+        list_due_on_conn, SchedulingUpdate, DEFAULT_GRADUATION_REPS,
     },
 };
 
@@ -275,4 +275,20 @@ async fn add_to_srs_is_idempotent() {
         .unwrap();
     assert!(second.already_scheduled, "second add must short-circuit");
     assert_eq!(second.due, t0, "existing due must not be reset");
+}
+
+#[tokio::test]
+async fn is_in_srs_reports_existing_schedule() {
+    let dir = TempDir::new().expect("tempdir");
+    let db_path = dir.path().join("wordbrain.db");
+    let conn = open(&db_path).await;
+    schema::apply(&conn).await.expect("apply schema");
+
+    assert!(!is_in_srs_on_conn(&conn, "ephemeral").await.unwrap());
+
+    let t0: i64 = 1_700_000_000_000;
+    add_to_srs_on_conn(&conn, "ephemeral", t0).await.unwrap();
+
+    assert!(is_in_srs_on_conn(&conn, "ephemeral").await.unwrap());
+    assert!(is_in_srs_on_conn(&conn, " Ephemeral ").await.unwrap());
 }

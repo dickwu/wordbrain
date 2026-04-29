@@ -39,13 +39,11 @@ interface DictionaryFloatProps {
 export function DictionaryFloat({ onOpenSettings, onShowLinked }: DictionaryFloatProps) {
   const [open, setOpen] = useState(false);
   const [initialQuery, setInitialQuery] = useState('');
-  const [contextSentence, setContextSentence] = useState('');
   const [autoSearch, setAutoSearch] = useState(false);
 
-  const openWith = (rawWord: string, context?: string) => {
+  const openWith = (rawWord: string) => {
     const word = normalizeLookupQuery(rawWord);
     setInitialQuery(word);
-    setContextSentence(context?.trim() || word);
     setAutoSearch(Boolean(word));
     setOpen(true);
   };
@@ -78,7 +76,7 @@ export function DictionaryFloat({ onOpenSettings, onShowLinked }: DictionaryFloa
       const selection = window.getSelection?.()?.toString();
       const word = normalizeLookupQuery(selection);
       if (!word) return;
-      openWith(word, selection ?? word);
+      openWith(word);
     };
     document.addEventListener('dblclick', onDblClick, true);
     return () => document.removeEventListener('dblclick', onDblClick, true);
@@ -99,7 +97,6 @@ export function DictionaryFloat({ onOpenSettings, onShowLinked }: DictionaryFloa
         <WordLookupModal
           visible={true}
           initialQuery={initialQuery}
-          contextSentence={contextSentence || initialQuery}
           autoSearch={autoSearch}
           onClose={() => {
             setOpen(false);

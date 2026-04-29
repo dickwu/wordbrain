@@ -37,11 +37,9 @@ cargo test               # Backend tests
   by domain in `src-tauri/src/commands/`. Schema and DB helpers in `src-tauri/src/db/`.
 - **Editor surface**: Tiptap v3 with a custom ProseMirror decoration plugin (`WordHighlightExtension`)
   that colours tokens against the in-memory known-word Set.
-- **Dictionary stack**: three tiers, all behind Rust IPC —
-  1. Bundled ECDICT (offline, primary)
-  2. Youdao / DeepL (online, cached in `word_translations_cache`)
-  3. AI on-demand gloss (Ollama / OpenAI / Anthropic)
-     API keys encrypted at rest via `tauri-plugin-stronghold`; never sent to renderer.
+- **Dictionary API**: lookup and SRS reveal use the configured private dictionary API server.
+  The server URL is stored in settings, and the API key is encrypted at rest via
+  `tauri-plugin-stronghold`; it is never sent to the renderer.
 
 ## Conventions
 
@@ -55,7 +53,7 @@ cargo test               # Backend tests
 
 ## Don't
 
-- Don't reintroduce S3 / R2 / AWS / MinIO / RustFS / file-upload UI — the repo was forked from an
-  S3 client and stripped deliberately.
+- Don't reintroduce cloud-object-storage / file-upload UI — those surfaces were stripped
+  deliberately.
 - Don't mock the SQLite layer in integration tests — hit a real in-memory Turso DB.
-- Don't hardcode API keys anywhere; use Settings > ApiKeysPanel + Stronghold.
+- Don't hardcode API keys anywhere; use Settings > Dictionary API + Stronghold.

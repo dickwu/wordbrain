@@ -7,7 +7,7 @@ import { applySrsRating, listDueSrs, type DueCardIpc, isTauri } from '@/app/lib/
 import { RATING_CODE, RATING_LABEL, schedule, type SrsRating } from '@/app/lib/srs';
 import { useWordStore } from '@/app/stores/wordStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
-import { lookupOffline, type OfflineEntry } from '@/app/lib/dict';
+import { lookupRemoteDictionary, type DictionaryLookupEntry } from '@/app/lib/dict';
 
 type Phase = 'loading' | 'empty' | 'reviewing' | 'done';
 
@@ -34,7 +34,7 @@ export function ReviewSession() {
   const [queue, setQueue] = useState<DueCardIpc[]>([]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [gloss, setGloss] = useState<OfflineEntry | null>(null);
+  const [gloss, setGloss] = useState<DictionaryLookupEntry | null>(null);
   const [graduatedCount, setGraduatedCount] = useState(0);
   const [reviewedCount, setReviewedCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -71,8 +71,8 @@ export function ReviewSession() {
     (async () => {
       if (!isTauri()) return;
       try {
-        const res = await lookupOffline(current.lemma);
-        if (!cancelled) setGloss(res.entry);
+        const res = await lookupRemoteDictionary(current.lemma, { limit: 1 });
+        if (!cancelled) setGloss(res.entries[0] ?? null);
       } catch {
         /* non-fatal */
       }
@@ -261,12 +261,9 @@ export function ReviewSession() {
               <div className="fc-answer">
                 {gloss ? (
                   <>
-                    {gloss.pos && (
-                      <div className="mono small dim" style={{ marginBottom: 4 }}>
-                        {gloss.pos}
-                        {gloss.ipa && <> · /{gloss.ipa}/</>}
-                      </div>
-                    )}
+                    <div className="mono small dim" style={{ marginBottom: 4 }}>
+                      {gloss.dictionary_name}
+                    </div>
                     <div
                       className="serif"
                       style={{
@@ -276,7 +273,7 @@ export function ReviewSession() {
                         whiteSpace: 'pre-wrap',
                       }}
                     >
-                      {gloss.definitions_zh || gloss.definitions_en || '(no gloss)'}
+                      {gloss.definition_text || gloss.headword}
                     </div>
                   </>
                 ) : (
@@ -284,7 +281,7 @@ export function ReviewSession() {
                     className="serif"
                     style={{ fontSize: 14, fontStyle: 'italic', color: 'var(--ink-3)' }}
                   >
-                    ECDICT has no entry for <span className="mono">{current.lemma}</span>.
+                    Dictionary API has no entry for <span className="mono">{current.lemma}</span>.
                   </div>
                 )}
                 <div className="fc-grades">
