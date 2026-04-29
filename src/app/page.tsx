@@ -47,8 +47,6 @@ import {
 } from '@/app/lib/ipc';
 import { buildMaterialInput, deriveTitle } from '@/app/lib/material-builder';
 
-const APP_VERSION = '0.1.9';
-
 const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own. Pick up a book, notice the words that snag your attention, and start turning strangers into acquaintances one sentence at a time. The network grows whether you are watching it or not.`;
 
 const VIEW_LABELS: Record<ViewId, string> = {
@@ -486,7 +484,6 @@ export default function Home() {
           dueCount={dueCount}
           storyUnread={storyUnread}
           hydrated={hydrated}
-          appVersion={APP_VERSION}
           writingHint={writingHint}
         />
         <div className="main">

@@ -47,7 +47,6 @@ interface SidebarProps {
   dueCount: number;
   storyUnread: number;
   hydrated: boolean;
-  appVersion: string;
   writingHint?: string | null;
 }
 
@@ -58,7 +57,6 @@ export function AppSidebar({
   dueCount,
   storyUnread,
   hydrated,
-  appVersion,
   writingHint,
 }: SidebarProps) {
   const effective = useEffectiveTheme();
@@ -76,7 +74,6 @@ export function AppSidebar({
         <div className="mark">
           Word<em>brain</em>
         </div>
-        <div className="ver">v{appVersion}</div>
         <div style={{ flex: 1 }} />
         <Tooltip title={`Switch to ${effective === 'dark' ? 'light' : 'dark'} theme`}>
           <button
