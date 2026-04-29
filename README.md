@@ -23,6 +23,15 @@ The cask lives in [`dickwu/homebrew-tap`](https://github.com/dickwu/homebrew-tap
 latest universal `.dmg` into `/Applications/WordBrain.app`, and updates land automatically every
 time you run `brew upgrade wordbrain`.
 
+> **First launch on macOS** — the build is not Apple-notarized yet, so Gatekeeper quarantines the
+> bundle. After install (or upgrade), clear the quarantine attribute once:
+>
+> ```bash
+> sudo xattr -d com.apple.quarantine /Applications/WordBrain.app/
+> ```
+>
+> Then open WordBrain normally. Notarization will be wired up in a future release.
+
 ### Direct download
 
 Pick your platform from the

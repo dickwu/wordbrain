@@ -163,8 +163,14 @@ jobs:
           version = os.environ["VERSION"]
           repo = os.environ["REPO_SLUG"]
           dist = pathlib.Path("dist-release")
+          # Tauri's updater queries platform keys as `<os>-<arch>` (e.g.
+          # `darwin-aarch64`, `darwin-x86_64`) — `darwin-universal` is not in
+          # its fallback chain. Map both arch keys to the same universal
+          # `.app.tar.gz` so Apple Silicon and Intel macs both resolve.
           pairs = [
-              ("darwin-universal", "*.app.tar.gz.sig"),
+              ("darwin-aarch64",  "*.app.tar.gz.sig"),
+              ("darwin-x86_64",   "*.app.tar.gz.sig"),
+              ("darwin-universal","*.app.tar.gz.sig"),
               ("windows-x86_64",  "*.msi.zip.sig"),
               ("linux-x86_64",    "*.AppImage.tar.gz.sig"),
           ]
