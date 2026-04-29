@@ -12,6 +12,12 @@ description: >
   PowerShell expansion, `--no-default-features` rejected by tauri CLI,
   bash-3.2 globstar on macOS runners, Node 20 action deprecation,
   `release: published` not firing from `GITHUB_TOKEN`-created releases).
+  Also covers the post-release symptoms: `brew install` failing with
+  "undefined method 'license' for Cask" (cask DSL has no `license`
+  stanza), the auto-updater failing with `None of the fallback platforms
+  […] were found` (Tauri queries `darwin-aarch64`, not `darwin-universal`),
+  and the Gatekeeper "WordBrain is damaged" prompt on un-notarized
+  installs (xattr quarantine workaround).
   Always prefer this skill over running publish.sh from memory — the
   pipeline has subtle traps documented below.
 ---
@@ -397,6 +403,114 @@ explicit destructive-ops authorisation.
 Prevention: the `bun run build` step in pre-flight catches this in ~20 s
 locally. If you only ran `bun run test` + `cargo check` and tagged anyway,
 this trap is what bit v0.1.8.
+
+### 13. `brew install dickwu/tap/wordbrain` fails with `undefined method 'license' for Cask`
+
+The Homebrew cask DSL is formula-only and **does not accept the `license`
+stanza**. The first version of `homebrew.yml`'s cask template included
+`license "MIT"`, which writes a syntactically invalid Ruby file to the tap
+repo:
+
+```
+Error: Cask 'wordbrain' definition is invalid:
+undefined method 'license' for Cask 'wordbrain'
+```
+
+The CI workflow doesn't catch this because it writes the file via
+`gh api PUT contents/Casks/wordbrain.rb` — GitHub's content API doesn't
+parse Ruby. Every release v0.1.7 → v0.2.0 shipped a broken cask; we only
+noticed when an end user tried `brew install`.
+
+Fix: remove the `license "..."` line from the cask template in
+`.github/workflows/homebrew.yml` (the line lives inside the heredoc that
+generates `/tmp/wordbrain.rb`). After committing the fix, **regenerate
+the cask** for any affected tag:
+
+```bash
+gh workflow run homebrew.yml --repo dickwu/wordbrain -f tag=v<x.y.z>
+```
+
+The DMG download URL + sha256 stay the same, so no rebuild is needed.
+
+Prevention: any future cask template change should be sanity-checked with
+`brew style /tmp/wordbrain.rb` or `brew audit --cask path/to/cask.rb`
+before merging — it surfaces invalid stanzas locally without needing a
+release.
+
+### 14. Auto-updater fails with `None of the fallback platforms […] were found`
+
+Tauri's updater on macOS queries `latest.json` with arch-specific platform
+keys (`darwin-aarch64`, `darwin-x86_64`) plus their `-app` fallback
+variants — **`darwin-universal` is not in its lookup chain**. The
+release.yml `Generate latest.json` step originally emitted only
+`darwin-universal`, so installs reported:
+
+```
+Update check failed: None of the fallback platforms
+["darwin-aarch64-app", "darwin-aarch64"] were found in the response
+`platforms` object
+```
+
+Same trap on Intel macs (`darwin-x86_64-app`, `darwin-x86_64`).
+
+Fix: in `.github/workflows/release.yml`'s `pairs = […]` table inside the
+`Generate latest.json` step, alias both arch keys to the same universal
+`.app.tar.gz.sig`:
+
+```python
+pairs = [
+    ("darwin-aarch64",  "*.app.tar.gz.sig"),
+    ("darwin-x86_64",   "*.app.tar.gz.sig"),
+    ("darwin-universal","*.app.tar.gz.sig"),  # legacy alias, optional
+    ("windows-x86_64",  "*.msi.zip.sig"),
+    ("linux-x86_64",    "*.AppImage.tar.gz.sig"),
+]
+```
+
+To **fix a release that's already on the wire**, re-write `latest.json`
+in place (the signature inside it is for the `.app.tar.gz`, which doesn't
+change — no rebuild needed):
+
+```bash
+curl -sL https://github.com/dickwu/wordbrain/releases/download/v<x.y.z>/latest.json -o /tmp/latest.json
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path('/tmp/latest.json')
+m = json.loads(p.read_text())
+mac = m['platforms']['darwin-universal']
+for key in ('darwin-aarch64', 'darwin-x86_64'):
+    m['platforms'].setdefault(key, mac)
+p.write_text(json.dumps(m, indent=2) + '\n')
+PY
+gh release upload v<x.y.z> /tmp/latest.json --clobber --repo dickwu/wordbrain
+```
+
+GitHub's release-asset CDN may serve the old file for a few minutes;
+verify via the API path (`gh release download v<x.y.z> --pattern latest.json
+--output -`) instead of the public URL when checking.
+
+Prevention: `pairs` should always include `darwin-aarch64` + `darwin-x86_64`.
+Treat `darwin-universal` as a documented alias, not the primary entry.
+
+### 15. macOS install via Homebrew is quarantined by Gatekeeper
+
+Without Apple notarization (`APPLE_*` secrets unwired — see secrets table
+above), the brew-installed `WordBrain.app` carries `com.apple.quarantine`
+xattr and macOS refuses to launch it ("WordBrain is damaged and can't be
+opened" or a Gatekeeper prompt).
+
+Workaround documented in `README.md`:
+
+```bash
+sudo xattr -d com.apple.quarantine /Applications/WordBrain.app/
+```
+
+This is per-install, so users have to repeat it after every
+`brew upgrade wordbrain` until notarization lands. Resolving this for
+real means wiring `APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_PASSWORD`,
+`APPLE_TEAM_ID`, `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE_PASSWORD`
+secrets and re-adding the `APPLE_*` env block to `release.yml`'s
+`Build & bundle` step (see trap #6's note about empty-string traps).
 
 ## Reporting status to the user
 
