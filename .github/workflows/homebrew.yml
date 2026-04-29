@@ -103,7 +103,6 @@ jobs:
             name "WordBrain"
             desc "Local-first English vocabulary builder with FSRS review and word-network graphs"
             homepage "https://github.com/${APP_REPO}"
-            license "MIT"
 
             app "WordBrain.app"
 
