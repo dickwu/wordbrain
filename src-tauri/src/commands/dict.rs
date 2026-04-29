@@ -17,6 +17,7 @@ pub struct DictionaryLookupEntry {
     pub definition_html: String,
     pub definition_page_html: String,
     pub definition_text: String,
+    pub asset_base_url: String,
     pub resolved_from: Option<String>,
 }
 
@@ -238,11 +239,42 @@ pub async fn lookup_remote_dictionary(
                 definition_html: entry.definition_html,
                 definition_page_html: entry.definition_page_html,
                 definition_text: entry.definition_text,
+                asset_base_url: dictionary_api_asset_base_url(&resolved.server_url),
                 resolved_from: entry.resolved_from,
             })
             .collect(),
         elapsed_ms: remote.elapsed_ms.max(start.elapsed().as_millis() as u64),
     })
+}
+
+#[tauri::command]
+pub async fn record_lookup_history(lemma: String) -> Result<(), String> {
+    db::lookup_history::record_lookup(&lemma)
+        .await
+        .map_err(|e| format!("record lookup history: {e}"))
+}
+
+#[tauri::command]
+pub async fn list_lookup_history(
+    limit: Option<u32>,
+) -> Result<Vec<db::lookup_history::LookupHistoryEntry>, String> {
+    db::lookup_history::list_lookup_history(limit.unwrap_or(20).clamp(1, 200))
+        .await
+        .map_err(|e| format!("list lookup history: {e}"))
+}
+
+#[tauri::command]
+pub async fn remove_lookup_history_word(lemma: String) -> Result<(), String> {
+    db::lookup_history::remove_lookup(&lemma)
+        .await
+        .map_err(|e| format!("remove lookup history word: {e}"))
+}
+
+#[tauri::command]
+pub async fn clear_lookup_history() -> Result<(), String> {
+    db::lookup_history::clear_lookup_history()
+        .await
+        .map_err(|e| format!("clear lookup history: {e}"))
 }
 
 struct DictionaryApiResolved {
@@ -393,11 +425,19 @@ fn normalize_dictionary_api_server_url(value: &str) -> Result<String, String> {
     Ok(with_scheme)
 }
 
+fn dictionary_api_asset_base_url(server_url: &str) -> String {
+    if server_url.ends_with('/') {
+        server_url.to_string()
+    } else {
+        format!("{server_url}/")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        fetch_remote_dictionaries_resolved, normalize_dictionary_api_server_url,
-        DictionaryApiResolved,
+        dictionary_api_asset_base_url, fetch_remote_dictionaries_resolved,
+        normalize_dictionary_api_server_url, DictionaryApiResolved,
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -417,6 +457,18 @@ mod tests {
     #[test]
     fn empty_dictionary_api_server_url_is_allowed_for_disabled_config() {
         assert_eq!(normalize_dictionary_api_server_url("   ").unwrap(), "");
+    }
+
+    #[test]
+    fn dictionary_api_asset_base_url_keeps_relative_assets_on_api_origin() {
+        assert_eq!(
+            dictionary_api_asset_base_url("https://dict.example.test"),
+            "https://dict.example.test/"
+        );
+        assert_eq!(
+            dictionary_api_asset_base_url("https://dict.example.test/api/"),
+            "https://dict.example.test/api/"
+        );
     }
 
     #[tokio::test]

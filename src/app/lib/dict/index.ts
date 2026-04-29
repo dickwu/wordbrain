@@ -11,6 +11,7 @@ export interface DictionaryLookupEntry {
   definition_html: string;
   definition_page_html: string;
   definition_text: string;
+  asset_base_url: string;
   resolved_from: string | null;
 }
 

@@ -1,7 +1,17 @@
+import { invoke } from '@tauri-apps/api/core';
+import { isTauri } from '@/app/lib/ipc';
+
 const WORD_RE = /^[A-Za-z][A-Za-z'’-]*$/;
 const LOOKUP_HISTORY_STORAGE_KEY = 'wordbrain.dictionary.lookupHistory.v1';
 const LOOKUP_HISTORY_LIMIT = 20;
 const LOOKUP_HISTORY_EVENT = 'wordbrain:lookup-history-changed';
+
+export interface LookupHistoryEntry {
+  lemma: string;
+  lookupCount: number;
+  firstLookedUpAt: number;
+  lastLookedUpAt: number;
+}
 
 /** True when `value` is a single English word we should hand to the dictionary. */
 export function isLookupCandidate(value: string | null | undefined): boolean {
@@ -40,9 +50,39 @@ export function loadLookupHistory(): string[] {
   }
 }
 
+export async function loadLookupHistoryPersisted(): Promise<string[]> {
+  if (!isTauri()) return loadLookupHistory();
+  try {
+    const rows = await invoke<LookupHistoryEntry[]>('list_lookup_history', {
+      limit: LOOKUP_HISTORY_LIMIT,
+    });
+    if (rows.length > 0) {
+      const history = rows.map((row) => row.lemma);
+      saveLookupHistory(history, { notify: false });
+      return history;
+    }
+  } catch (err) {
+    console.warn('[wordbrain] list_lookup_history failed', err);
+  }
+  return loadLookupHistory();
+}
+
 export function recordLookupHistory(rawQuery: string): string[] {
   const next = mergeLookupHistory(loadLookupHistory(), rawQuery);
   saveLookupHistory(next);
+  return next;
+}
+
+export async function recordLookupHistoryPersisted(rawQuery: string): Promise<string[]> {
+  const next = recordLookupHistory(rawQuery);
+  const query = normalizeLookupQuery(rawQuery);
+  if (!query || !isTauri()) return next;
+  try {
+    await invoke<void>('record_lookup_history', { lemma: query });
+    dispatchLookupHistoryChanged();
+  } catch (err) {
+    console.warn('[wordbrain] record_lookup_history failed', err);
+  }
   return next;
 }
 
@@ -53,8 +93,32 @@ export function removeLookupHistoryWord(word: string): string[] {
   return next;
 }
 
+export async function removeLookupHistoryWordPersisted(word: string): Promise<string[]> {
+  const next = removeLookupHistoryWord(word);
+  const normalized = normalizeLookupQuery(word);
+  if (!normalized || !isTauri()) return next;
+  try {
+    await invoke<void>('remove_lookup_history_word', { lemma: normalized });
+    dispatchLookupHistoryChanged();
+  } catch (err) {
+    console.warn('[wordbrain] remove_lookup_history_word failed', err);
+  }
+  return next;
+}
+
 export function clearLookupHistory(): void {
   saveLookupHistory([]);
+}
+
+export async function clearLookupHistoryPersisted(): Promise<void> {
+  clearLookupHistory();
+  if (!isTauri()) return;
+  try {
+    await invoke<void>('clear_lookup_history');
+    dispatchLookupHistoryChanged();
+  } catch (err) {
+    console.warn('[wordbrain] clear_lookup_history failed', err);
+  }
 }
 
 export function subscribeLookupHistory(callback: () => void): () => void {
@@ -77,7 +141,7 @@ function sanitizeLookupHistory(items: unknown[], limit = LOOKUP_HISTORY_LIMIT): 
   return out;
 }
 
-function saveLookupHistory(history: string[]) {
+function saveLookupHistory(history: string[], opts: { notify?: boolean } = {}) {
   const storage = getLookupHistoryStorage();
   if (!storage) return;
   try {
@@ -85,11 +149,17 @@ function saveLookupHistory(history: string[]) {
       LOOKUP_HISTORY_STORAGE_KEY,
       JSON.stringify(sanitizeLookupHistory(history).slice(0, LOOKUP_HISTORY_LIMIT))
     );
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event(LOOKUP_HISTORY_EVENT));
+    if (opts.notify !== false) {
+      dispatchLookupHistoryChanged();
     }
   } catch {
     // Storage can be disabled in hardened webviews; lookup itself should still work.
+  }
+}
+
+function dispatchLookupHistoryChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(LOOKUP_HISTORY_EVENT));
   }
 }
 

@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { Empty } from 'antd';
 import { Icons } from '@/app/components/shell/Icons';
 import {
-  clearLookupHistory,
-  loadLookupHistory,
-  removeLookupHistoryWord,
+  clearLookupHistoryPersisted,
+  loadLookupHistoryPersisted,
+  removeLookupHistoryWordPersisted,
   subscribeLookupHistory,
 } from '@/app/lib/lookup-history';
 
@@ -26,7 +26,9 @@ export function SearchHistoryView({ onSearch }: SearchHistoryViewProps) {
   const [history, setHistory] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
 
-  const refresh = () => setHistory(loadLookupHistory());
+  const refresh = () => {
+    void loadLookupHistoryPersisted().then(setHistory);
+  };
 
   useEffect(() => {
     refresh();
@@ -101,7 +103,7 @@ export function SearchHistoryView({ onSearch }: SearchHistoryViewProps) {
                     aria-label={`Remove ${word}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setHistory(removeLookupHistoryWord(word));
+                      void removeLookupHistoryWordPersisted(word).then(setHistory);
                     }}
                     style={{ padding: 4 }}
                   >
@@ -121,8 +123,7 @@ export function SearchHistoryView({ onSearch }: SearchHistoryViewProps) {
             type="button"
             className="btn ghost sm"
             onClick={() => {
-              clearLookupHistory();
-              setHistory([]);
+              void clearLookupHistoryPersisted().then(() => setHistory([]));
             }}
             style={{ color: 'var(--outside-line)' }}
           >

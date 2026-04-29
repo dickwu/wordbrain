@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 use turso::{Builder, Connection};
 
+pub mod lookup_history;
 pub mod materials;
 pub mod names;
 pub mod network;

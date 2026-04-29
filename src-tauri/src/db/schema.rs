@@ -174,6 +174,23 @@ pub async fn apply(conn: &Connection) -> DbResult<()> {
     )
     .await?;
 
+    // 4.6b Dictionary lookup history. The renderer keeps a localStorage
+    // fallback for browser preview; Tauri stores the canonical local-first log
+    // here so searches survive webview resets and app restarts.
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS lookup_history (
+          lemma              TEXT PRIMARY KEY,
+          lookup_count       INTEGER NOT NULL DEFAULT 1,
+          first_looked_up_at INTEGER NOT NULL,
+          last_looked_up_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_lookup_history_last_seen
+            ON lookup_history(last_looked_up_at DESC);
+        ",
+    )
+    .await?;
+
     // 4.7 Per-event log for the learning-loop usage counter. Every
     // `register_word_use` IPC call inserts one row here so the +1 stream
     // is auditable / replayable independent of the cumulative counter on

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 use turso::Builder;
-use wordbrain_lib::db::{names, schema, words};
+use wordbrain_lib::db::{lookup_history, names, schema, words};
 
 async fn open(path: &PathBuf) -> turso::Connection {
     let db = Builder::new_local(path.to_str().expect("utf8 path"))
@@ -153,5 +153,36 @@ async fn known_names_seed_and_manual_entries_survive_restart() {
         let known_names = names::get_all_known_names_on_conn(&conn).await.unwrap();
         assert!(known_names.contains(&"mia".to_string()));
         assert!(known_names.contains(&"juniper".to_string()));
+    }
+}
+
+#[tokio::test]
+async fn lookup_history_survives_connection_close_and_reopen() {
+    let dir = TempDir::new().expect("tempdir");
+    let db_path = dir.path().join("wordbrain.db");
+
+    {
+        let conn = open(&db_path).await;
+        schema::apply(&conn).await.unwrap();
+        lookup_history::record_lookup_on_conn(&conn, "automatic")
+            .await
+            .unwrap();
+        lookup_history::record_lookup_on_conn(&conn, "serendipity")
+            .await
+            .unwrap();
+        lookup_history::record_lookup_on_conn(&conn, "automatic")
+            .await
+            .unwrap();
+    }
+
+    {
+        let conn = open(&db_path).await;
+        schema::apply(&conn).await.unwrap();
+        let rows = lookup_history::list_lookup_history_on_conn(&conn, 20)
+            .await
+            .unwrap();
+        let automatic = rows.iter().find(|row| row.lemma == "automatic").unwrap();
+        assert_eq!(automatic.lookup_count, 2);
+        assert!(rows.iter().any(|row| row.lemma == "serendipity"));
     }
 }

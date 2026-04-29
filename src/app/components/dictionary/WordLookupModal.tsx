@@ -35,7 +35,7 @@ import { addToSrs, isInSrs, isTauri } from '@/app/lib/ipc';
 import {
   isLookupCandidate,
   normalizeLookupQuery,
-  recordLookupHistory,
+  recordLookupHistoryPersisted,
 } from '@/app/lib/lookup-history';
 import { refreshDueCount } from '@/app/stores/srsStore';
 import { looksLikeNameToken, useWordStore } from '@/app/stores/wordStore';
@@ -43,6 +43,32 @@ import { looksLikeNameToken, useWordStore } from '@/app/stores/wordStore';
 const { Text, Title } = Typography;
 
 export { isLookupCandidate, normalizeLookupQuery };
+
+export function buildDictionaryFrameSrcDoc(
+  sourceHtml: string,
+  assetBaseUrl?: string | null
+): string {
+  const html = sourceHtml.trim();
+  const normalizedBaseUrl = normalizeDictionaryAssetBaseUrl(assetBaseUrl);
+  if (!html || !normalizedBaseUrl || /<base(?:\s|>|\/)/i.test(html)) {
+    return html;
+  }
+
+  const baseTag = `<base href="${escapeHtmlAttribute(normalizedBaseUrl)}">`;
+  const headOpenEnd = findOpeningTagEnd(html, 'head');
+  if (headOpenEnd !== -1) {
+    return `${html.slice(0, headOpenEnd)}${baseTag}${html.slice(headOpenEnd)}`;
+  }
+
+  const htmlOpenEnd = findOpeningTagEnd(html, 'html');
+  if (htmlOpenEnd !== -1) {
+    return `${html.slice(0, htmlOpenEnd)}<head>${baseTag}</head>${html.slice(htmlOpenEnd)}`;
+  }
+
+  const doctype = html.match(/^\s*<!doctype[^>]*>/i)?.[0] ?? '<!doctype html>';
+  const body = doctype === '<!doctype html>' ? html : html.slice(doctype.length);
+  return `${doctype}<html><head>${baseTag}</head><body>${body}</body></html>`;
+}
 
 interface WordLookupModalProps {
   visible: boolean;
@@ -165,7 +191,7 @@ export function WordLookupModal({
   ) => {
     const trimmed = (overrideQuery ?? query).trim();
     if (!trimmed) return;
-    recordLookupHistory(trimmed);
+    await recordLookupHistoryPersisted(trimmed);
     const dictionarySlug =
       opts && Object.prototype.hasOwnProperty.call(opts, 'dictionarySlug')
         ? (opts.dictionarySlug ?? null)
@@ -481,6 +507,10 @@ function DictionaryPage({
 }) {
   const { token } = theme.useToken();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const frameSrcDoc = buildDictionaryFrameSrcDoc(
+    activeEntry.definition_page_html || activeEntry.definition_html,
+    activeEntry.asset_base_url
+  );
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -563,7 +593,7 @@ function DictionaryPage({
         <iframe
           ref={iframeRef}
           title={`${activeEntry.dictionary_name}: ${activeEntry.headword}`}
-          srcDoc={activeEntry.definition_page_html || activeEntry.definition_html}
+          srcDoc={frameSrcDoc}
           sandbox="allow-scripts"
           allow="autoplay"
           style={{
@@ -589,4 +619,29 @@ function isDictionaryNavigateMessage(value: unknown): value is DictionaryNavigat
     data.query.trim().length > 0 &&
     (data.dictionarySlug === undefined || typeof data.dictionarySlug === 'string')
   );
+}
+
+function normalizeDictionaryAssetBaseUrl(value?: string | null): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    url.search = '';
+    url.hash = '';
+    if (!url.pathname.endsWith('/')) {
+      url.pathname = `${url.pathname}/`;
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function findOpeningTagEnd(html: string, tagName: string): number {
+  const match = new RegExp(`<${tagName}(?:\\s[^>]*)?>`, 'i').exec(html);
+  return match ? match.index + match[0].length : -1;
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }

@@ -20,7 +20,7 @@ vi.mock('@/app/lib/ipc', () => ({
 }));
 
 import { isInSrs } from '@/app/lib/ipc';
-import { WordLookupModal } from '../WordLookupModal';
+import { buildDictionaryFrameSrcDoc, WordLookupModal } from '../WordLookupModal';
 
 function renderModal(initialQuery = 'automatic') {
   return render(
@@ -59,5 +59,31 @@ describe('WordLookupModal SRS controls', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /add to srs/i })).toBeNull();
     });
+  });
+});
+
+describe('buildDictionaryFrameSrcDoc', () => {
+  it('injects a dictionary API base URL before linked resources', () => {
+    const html =
+      '<!doctype html><html><head><link rel="stylesheet" href="/static/dict.css"></head><body></body></html>';
+
+    expect(buildDictionaryFrameSrcDoc(html, 'https://dict.example.test')).toContain(
+      '<head><base href="https://dict.example.test/"><link'
+    );
+  });
+
+  it('wraps fragments so relative resources do not resolve against the packaged app', () => {
+    expect(
+      buildDictionaryFrameSrcDoc('<img src="audio/speaker.svg">', 'https://dict.example.test/api')
+    ).toBe(
+      '<!doctype html><html><head><base href="https://dict.example.test/api/"></head><body><img src="audio/speaker.svg"></body></html>'
+    );
+  });
+
+  it('keeps API-provided base tags intact', () => {
+    const html =
+      '<html><head><base href="https://cdn.example.test/"><link href="dict.css"></head></html>';
+
+    expect(buildDictionaryFrameSrcDoc(html, 'https://dict.example.test')).toBe(html);
   });
 });
