@@ -7,6 +7,7 @@ import { useEffectiveTheme, useThemeStore } from '@/app/stores/themeStore';
 export type ViewId =
   | 'library'
   | 'reader'
+  | 'learning'
   | 'review'
   | 'story'
   | 'writing'
@@ -24,6 +25,7 @@ const NAV: Array<{
 }> = [
   { id: 'library', label: 'Library', icon: 'Library', group: 'Read' },
   { id: 'reader', label: 'Reader', icon: 'Reader', group: 'Read' },
+  { id: 'learning', label: 'Learning', icon: 'Words', group: 'Practice' },
   { id: 'review', label: 'Review', icon: 'Review', badgeKey: 'due', group: 'Practice' },
   { id: 'story', label: 'Story', icon: 'Story', badgeKey: 'storyUnread', group: 'Practice' },
   { id: 'writing', label: 'Writing', icon: 'Writing', group: 'Practice' },
@@ -44,6 +46,7 @@ interface SidebarProps {
   view: ViewId;
   onChange: (v: ViewId) => void;
   knownCount: number;
+  learningCount: number;
   dueCount: number;
   storyUnread: number;
   hydrated: boolean;
@@ -54,6 +57,7 @@ export function AppSidebar({
   view,
   onChange,
   knownCount,
+  learningCount,
   dueCount,
   storyUnread,
   hydrated,
@@ -126,6 +130,10 @@ export function AppSidebar({
         <button type="button" className="stat" onClick={() => onChange('words')}>
           <div className="num tabular">{knownCount.toLocaleString()}</div>
           <div className="lbl">Known</div>
+        </button>
+        <button type="button" className="stat" onClick={() => onChange('learning')}>
+          <div className="num tabular">{learningCount.toLocaleString()}</div>
+          <div className="lbl">Learning</div>
         </button>
         <button type="button" className="stat" onClick={() => onChange('review')}>
           <div className="num tabular">{dueCount}</div>

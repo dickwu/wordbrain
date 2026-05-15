@@ -18,6 +18,7 @@ import { SearchHistoryView } from '@/app/components/dictionary/SearchHistoryView
 import { WordLookupModal } from '@/app/components/dictionary/WordLookupModal';
 import { NetworkView } from '@/app/components/network/NetworkView';
 import { WordsView } from '@/app/components/words/WordsView';
+import { LearningView } from '@/app/components/learning/LearningView';
 import { ReviewSession } from '@/app/components/srs/ReviewSession';
 import { StoryView } from '@/app/components/story/StoryView';
 import { WritingView } from '@/app/components/writing/WritingView';
@@ -29,6 +30,7 @@ import { recentPracticeWordsIpc } from '@/app/lib/ipc';
 import { useWordStore, hydrateFromDb } from '@/app/stores/wordStore';
 import { useSettingsStore } from '@/app/stores/settingsStore';
 import { refreshDueCount, useSrsStore } from '@/app/stores/srsStore';
+import { refreshLearningCount, useLearningStore } from '@/app/stores/learningStore';
 import {
   FirstLaunchWizard,
   needsFirstLaunchWizard,
@@ -52,6 +54,7 @@ const DEMO_TEXT = `Curiosity is the engine of every vocabulary you will ever own
 const VIEW_LABELS: Record<ViewId, string> = {
   reader: 'Reader',
   library: 'Library',
+  learning: 'Learning',
   review: 'Review',
   story: 'Story',
   writing: 'Writing',
@@ -67,7 +70,9 @@ export default function Home() {
   const [historyLookup, setHistoryLookup] = useState<{ word: string; nonce: number } | null>(null);
   const [readerSeed, setReaderSeed] = useState<string>(DEMO_TEXT);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
-  const [view, setView] = useState<ViewId>('reader');
+  // v0.3 Fri-night: learning-first repositioning — default landing is the Learning
+  // view, not the Reader. See ~/.gstack/projects/dickwu-wordbrain/.../design-*.md.
+  const [view, setView] = useState<ViewId>('learning');
   const [wordDrawerLemma, setWordDrawerLemma] = useState<string | null>(null);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   const [storyUnread, setStoryUnread] = useState(0);
@@ -75,6 +80,7 @@ export default function Home() {
   const knownCount = useWordStore((s) => s.known.size);
   const hydrated = useWordStore((s) => s.hydrated);
   const dueCount = useSrsStore((s) => s.dueCount);
+  const learningCount = useLearningStore((s) => s.learningCount);
   const [wizardOpen, setWizardOpen] = useState(false);
   const prevMaterialRef = useRef<number | null>(null);
 
@@ -101,6 +107,7 @@ export default function Home() {
         }
         await hydrateFromDb();
         void refreshDueCount();
+        void refreshLearningCount();
       } catch (err) {
         console.warn('[wordbrain] startup hydrate skipped', err);
       }
@@ -124,6 +131,7 @@ export default function Home() {
         console.warn('[wordbrain] story badge listMaterials failed', err);
       }
       void refreshDueCount();
+      void refreshLearningCount();
     };
     void tick();
     const id = window.setInterval(() => void tick(), 30_000);
@@ -434,6 +442,8 @@ export default function Home() {
     switch (view) {
       case 'reader':
         return <ReaderView readerSeed={readerSeed} onLemmaDrill={setWordDrawerLemma} />;
+      case 'learning':
+        return <LearningView />;
       case 'review':
         return <ReviewSession />;
       case 'story':
@@ -481,6 +491,7 @@ export default function Home() {
           view={view}
           onChange={setView}
           knownCount={knownCount}
+          learningCount={learningCount}
           dueCount={dueCount}
           storyUnread={storyUnread}
           hydrated={hydrated}
