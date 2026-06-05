@@ -25,4 +25,10 @@ if (typeof window !== 'undefined') {
     window.ResizeObserver = resizeObserverPolyfill;
     globalThis.ResizeObserver = resizeObserverPolyfill;
   }
+  if (typeof document !== 'undefined' && !document.elementFromPoint) {
+    // jsdom has no layout engine; Tiptap 3.25's placeholder viewport tracking
+    // calls posAtCoords -> root.elementFromPoint. Returning null lets prosemirror
+    // treat it as "no node at the point" so the editor mounts cleanly under test.
+    document.elementFromPoint = () => null;
+  }
 }
