@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App as AntApp, ConfigProvider } from 'antd';
 
 vi.mock('@/app/lib/dict', () => ({
@@ -20,13 +20,18 @@ vi.mock('@/app/lib/ipc', () => ({
 }));
 
 import { isInSrs } from '@/app/lib/ipc';
+import { lookupRemoteDictionary } from '@/app/lib/dict';
 import { buildDictionaryFrameSrcDoc, WordLookupModal } from '../WordLookupModal';
 
-function renderModal(initialQuery = 'automatic') {
+// Comfortably longer than the modal's AUTO_SEARCH_DEBOUNCE_MS (450ms) so a
+// negative assertion can be sure the debounced lookup would have fired by now.
+const AUTO_SEARCH_SETTLE_MS = 700;
+
+function renderModal(initialQuery = 'automatic', extraProps = {}) {
   return render(
     <ConfigProvider>
       <AntApp>
-        <WordLookupModal visible initialQuery={initialQuery} onClose={() => {}} />
+        <WordLookupModal visible initialQuery={initialQuery} onClose={() => {}} {...extraProps} />
       </AntApp>
     </ConfigProvider>
   );
@@ -59,6 +64,41 @@ describe('WordLookupModal SRS controls', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /add to srs/i })).toBeNull();
     });
+  });
+});
+
+describe('WordLookupModal auto-search', () => {
+  beforeEach(() => {
+    vi.mocked(isInSrs).mockResolvedValue(false);
+    vi.mocked(lookupRemoteDictionary).mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('fires the lookup automatically a beat after the user types', async () => {
+    renderModal('', { autoSearch: false });
+
+    fireEvent.change(screen.getByPlaceholderText('Look up a word'), {
+      target: { value: 'serendipity' },
+    });
+
+    await waitFor(
+      () => expect(lookupRemoteDictionary).toHaveBeenCalledWith('serendipity', expect.anything()),
+      { timeout: 2000 }
+    );
+    expect(lookupRemoteDictionary).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-search the initial query when autoSearch is off', async () => {
+    renderModal('automatic');
+
+    // Let the isInSrs effect settle, then give the debounce window time to (not) fire.
+    await waitFor(() => expect(isInSrs).toHaveBeenCalledWith('automatic'));
+    await new Promise((resolve) => setTimeout(resolve, AUTO_SEARCH_SETTLE_MS));
+
+    expect(lookupRemoteDictionary).not.toHaveBeenCalled();
   });
 });
 

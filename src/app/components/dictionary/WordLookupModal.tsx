@@ -42,6 +42,9 @@ import { looksLikeNameToken, useWordStore } from '@/app/stores/wordStore';
 
 const { Text, Title } = Typography;
 
+/** Idle time after the last keystroke before auto-firing the dictionary lookup. */
+const AUTO_SEARCH_DEBOUNCE_MS = 450;
+
 export { isLookupCandidate, normalizeLookupQuery };
 
 export function buildDictionaryFrameSrcDoc(
@@ -117,6 +120,11 @@ export function WordLookupModal({
   const [srsStatus, setSrsStatus] = useState<{ lemma: string; inSrs: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const ranAutoRef = useRef(false);
+  // The last query we actually issued a lookup for. Lets the debounced
+  // auto-search skip queries already shown — the on-mount autoSearch path,
+  // runLookup's trailing-whitespace normalization, linked-entry navigation,
+  // and the Back button — so typing is the only thing that re-fires it.
+  const lastLookupRef = useRef(initialQuery.trim());
 
   const dictionaryOptions = useMemo(
     () => [
@@ -191,6 +199,7 @@ export function WordLookupModal({
   ) => {
     const trimmed = (overrideQuery ?? query).trim();
     if (!trimmed) return;
+    lastLookupRef.current = trimmed;
     await recordLookupHistoryPersisted(trimmed);
     const dictionarySlug =
       opts && Object.prototype.hasOwnProperty.call(opts, 'dictionarySlug')
@@ -241,6 +250,22 @@ export function WordLookupModal({
     void runLookup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSearch, loadingDictionaries, query]);
+
+  // Auto-search: fire the lookup automatically a short beat after the user
+  // stops typing, so they never have to press Enter or click Search. Debounced
+  // per keystroke and skipped for any query we've already looked up (see
+  // lastLookupRef) so it never duplicates the autoSearch path or re-fetches
+  // after Back / linked-entry navigation.
+  useEffect(() => {
+    if (!visible) return;
+    const trimmed = query.trim();
+    if (!trimmed || trimmed === lastLookupRef.current) return;
+    const handle = setTimeout(() => {
+      void runLookup();
+    }, AUTO_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, visible]);
 
   const openSettings = () => {
     onClose();
@@ -304,6 +329,7 @@ export function WordLookupModal({
     if (!previous) return;
     setEntryHistory((items) => items.slice(0, -1));
     setQuery(previous.query);
+    lastLookupRef.current = previous.query.trim();
     setSelectedDictionarySlug(previous.selectedDictionarySlug);
     setResult(previous.result);
     setActiveEntryIndex(previous.activeEntryIndex);
