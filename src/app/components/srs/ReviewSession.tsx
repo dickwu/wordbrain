@@ -8,6 +8,7 @@ import { RATING_CODE, RATING_LABEL, schedule, type SrsRating } from '@/app/lib/s
 import { useWordStore } from '@/app/stores/wordStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
 import { lookupRemoteDictionary, type DictionaryLookupEntry } from '@/app/lib/dict';
+import { DictionaryEntryFrame } from '@/app/components/dictionary/DictionaryEntryFrame';
 
 type Phase = 'loading' | 'empty' | 'reviewing' | 'done';
 
@@ -261,20 +262,10 @@ export function ReviewSession() {
               <div className="fc-answer">
                 {gloss ? (
                   <>
-                    <div className="mono small dim" style={{ marginBottom: 4 }}>
+                    <div className="mono small dim" style={{ marginBottom: 8 }}>
                       {gloss.dictionary_name}
                     </div>
-                    <div
-                      className="serif"
-                      style={{
-                        fontSize: 18,
-                        lineHeight: 1.45,
-                        color: 'var(--ink)',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {gloss.definition_text || gloss.headword}
-                    </div>
+                    <DictionaryEntryFrame entry={gloss} height="min(50vh, 480px)" minHeight={300} />
                   </>
                 ) : (
                   <div

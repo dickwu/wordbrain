@@ -39,6 +39,7 @@ import {
 } from '@/app/lib/lookup-history';
 import { refreshDueCount } from '@/app/stores/srsStore';
 import { looksLikeNameToken, useWordStore } from '@/app/stores/wordStore';
+import { DictionaryEntryFrame } from './DictionaryEntryFrame';
 
 const { Text, Title } = Typography;
 
@@ -46,32 +47,9 @@ const { Text, Title } = Typography;
 const AUTO_SEARCH_DEBOUNCE_MS = 450;
 
 export { isLookupCandidate, normalizeLookupQuery };
-
-export function buildDictionaryFrameSrcDoc(
-  sourceHtml: string,
-  assetBaseUrl?: string | null
-): string {
-  const html = sourceHtml.trim();
-  const normalizedBaseUrl = normalizeDictionaryAssetBaseUrl(assetBaseUrl);
-  if (!html || !normalizedBaseUrl || /<base(?:\s|>|\/)/i.test(html)) {
-    return html;
-  }
-
-  const baseTag = `<base href="${escapeHtmlAttribute(normalizedBaseUrl)}">`;
-  const headOpenEnd = findOpeningTagEnd(html, 'head');
-  if (headOpenEnd !== -1) {
-    return `${html.slice(0, headOpenEnd)}${baseTag}${html.slice(headOpenEnd)}`;
-  }
-
-  const htmlOpenEnd = findOpeningTagEnd(html, 'html');
-  if (htmlOpenEnd !== -1) {
-    return `${html.slice(0, htmlOpenEnd)}<head>${baseTag}</head>${html.slice(htmlOpenEnd)}`;
-  }
-
-  const doctype = html.match(/^\s*<!doctype[^>]*>/i)?.[0] ?? '<!doctype html>';
-  const body = doctype === '<!doctype html>' ? html : html.slice(doctype.length);
-  return `${doctype}<html><head>${baseTag}</head><body>${body}</body></html>`;
-}
+// Re-exported for back-compat; the implementation now lives with the shared
+// renderer in DictionaryEntryFrame.
+export { buildDictionaryFrameSrcDoc } from './DictionaryEntryFrame';
 
 interface WordLookupModalProps {
   visible: boolean;
@@ -90,12 +68,6 @@ interface LookupSnapshot {
   selectedDictionarySlug: string | null;
   result: DictionaryLookupResult;
   activeEntryIndex: number;
-}
-
-interface DictionaryNavigateMessage {
-  type: 'dictionary-api:navigate';
-  query: string;
-  dictionarySlug?: string;
 }
 
 export function WordLookupModal({
@@ -532,21 +504,6 @@ function DictionaryPage({
   onNavigateEntry: (query: string, dictionarySlug?: string) => void;
 }) {
   const { token } = theme.useToken();
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const frameSrcDoc = buildDictionaryFrameSrcDoc(
-    activeEntry.definition_page_html || activeEntry.definition_html,
-    activeEntry.asset_base_url
-  );
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
-      if (!isDictionaryNavigateMessage(event.data)) return;
-      onNavigateEntry(event.data.query, event.data.dictionarySlug);
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [onNavigateEntry]);
 
   return (
     <div
@@ -616,58 +573,8 @@ function DictionaryPage({
           </Text>
         </div>
 
-        <iframe
-          ref={iframeRef}
-          title={`${activeEntry.dictionary_name}: ${activeEntry.headword}`}
-          srcDoc={frameSrcDoc}
-          sandbox="allow-scripts"
-          allow="autoplay"
-          style={{
-            width: '100%',
-            height: 'min(64vh, 640px)',
-            minHeight: 500,
-            border: `1px solid ${token.colorBorderSecondary}`,
-            borderRadius: 6,
-            background: token.colorBgContainer,
-          }}
-        />
+        <DictionaryEntryFrame entry={activeEntry} onNavigateEntry={onNavigateEntry} />
       </div>
     </div>
   );
-}
-
-function isDictionaryNavigateMessage(value: unknown): value is DictionaryNavigateMessage {
-  if (!value || typeof value !== 'object') return false;
-  const data = value as Record<string, unknown>;
-  return (
-    data.type === 'dictionary-api:navigate' &&
-    typeof data.query === 'string' &&
-    data.query.trim().length > 0 &&
-    (data.dictionarySlug === undefined || typeof data.dictionarySlug === 'string')
-  );
-}
-
-function normalizeDictionaryAssetBaseUrl(value?: string | null): string {
-  const trimmed = value?.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed);
-    url.search = '';
-    url.hash = '';
-    if (!url.pathname.endsWith('/')) {
-      url.pathname = `${url.pathname}/`;
-    }
-    return url.toString();
-  } catch {
-    return '';
-  }
-}
-
-function findOpeningTagEnd(html: string, tagName: string): number {
-  const match = new RegExp(`<${tagName}(?:\\s[^>]*)?>`, 'i').exec(html);
-  return match ? match.index + match[0].length : -1;
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
