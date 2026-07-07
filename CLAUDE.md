@@ -8,15 +8,18 @@ Guidance for Claude Code working in this repo.
 
 - Turso SQLite. English tokenization with Chinese glosses. Single-user, cross-platform desktop app.
 
-Canonical plan: `.omc/plans/wordbrain-v1.md`. Acceptance criteria: `.omc/prd.json`.
+Canonical plan: `.omc/plans/wordbrain-v1.md`. Acceptance criteria: `.omc/prd.json` (both local
+and gitignored — absent from fresh clones and CI).
 
 ## Commands
 
 ```bash
 bun install              # Install JS dependencies (Bun, not npm)
 bun run dev              # Next.js dev server on :3000
-bun run tauri dev        # Full Tauri app in dev mode
-bun run tauri build      # Production build (dmg/msi/AppImage)
+bun run tauri:dev        # Full Tauri app in dev (adds --features dev-connector instrumentation)
+bun run tauri build      # Production bundles (bundle targets: "all" + updater artifacts)
+bun run test             # Vitest run (single test: bunx vitest run -t "<name>")
+bun run test:watch       # Vitest watch
 bun run format           # Prettier write
 bun run format:check     # Prettier check
 ```
@@ -29,6 +32,9 @@ cargo check              # Type-check
 cargo test               # Backend tests
 ```
 
+CI installs with `bun install --frozen-lockfile` and builds with `--locked` — commit updated
+`bun.lock` / `Cargo.lock` with any dependency change.
+
 ## Architecture
 
 - **Frontend** (`src/app/`): Next.js 16 static export (`output: 'export'`), React 19, Ant Design 6,
@@ -40,20 +46,33 @@ cargo test               # Backend tests
 - **Dictionary API**: lookup and SRS reveal use the configured private dictionary API server.
   The server URL is stored in settings, and the API key is encrypted at rest via
   `tauri-plugin-stronghold`; it is never sent to the renderer.
+- **AI features** (`src-tauri/src/ai/`): story generation, MCQ explanations, writing grading,
+  synonym extraction. These shell out to local CLIs — `claude -p` primary, `codex exec` fallback —
+  never HTTP APIs. Availability is probed at boot; binaries overridable via `WORDBRAIN_CLAUDE_BIN` /
+  `WORDBRAIN_CODEX_BIN`. Ignore the vestigial HTTP `AiProvider` types in `src/app/lib/dict/index.ts`.
 
 ## Conventions
 
 - **Package manager**: Bun. No npm/yarn.
 - **AntD message API**: always `const { message } = App.useApp()`. Never `import { message } from 'antd'`.
-- **Tauri IPC**: backend exposes `#[tauri::command]`; frontend calls via `@tauri-apps/api/invoke`.
+- **Tauri IPC**: backend exposes `#[tauri::command]`; frontend calls `invoke` from `@tauri-apps/api/core`.
 - **Naming**: PascalCase for React components, camelCase for stores/hooks/utils.
 - **SQLite writes**: go through Rust commands only. Frontend never opens the DB directly.
 - **Known-word set** is kept in `src/app/stores/wordStore.ts` as an in-memory `Set<string>` for
   O(1) highlight lookup; mutations round-trip through IPC for persistence.
 
+## Release
+
+`scripts/publish.sh <version> --ci` bumps package.json / tauri.conf.json / Cargo.toml in lockstep,
+tags, and pushes; GitHub Actions builds and publishes. Follow the tracked
+`.claude/skills/wordbrain-release` skill — the pipeline has documented traps. The updater
+`latest.json` ships macOS keys only (by design, not a regression).
+
 ## Don't
 
 - Don't reintroduce cloud-object-storage / file-upload UI — those surfaces were stripped
   deliberately.
-- Don't mock the SQLite layer in integration tests — hit a real in-memory Turso DB.
+- Don't mock the SQLite layer in tests — hit real Turso: `:memory:` in db unit tests, file-backed
+  temp DBs in `src-tauri/tests/` integration tests.
 - Don't hardcode API keys anywhere; use Settings > Dictionary API + Stronghold.
+- Don't add PDF ingestion — out of scope for v1 (epub/srt parsers only).
