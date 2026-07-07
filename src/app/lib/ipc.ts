@@ -117,6 +117,16 @@ export interface EpubChapter {
 export interface MaterialForWord {
   material_id: number;
   title: string;
+  /** Routes profile-drawer clicks: docs → Reader, ai_story → Story view. */
+  source_kind:
+    | 'paste'
+    | 'file'
+    | 'url'
+    | 'epub'
+    | 'epub_chapter'
+    | 'ai_story'
+    | 'writing_submission'
+    | string;
   created_at: number;
   read_at: number | null;
   occurrence_count: number;
@@ -351,6 +361,97 @@ export async function recentPracticeWordsIpc(
   limit: number
 ): Promise<RecentWordIpc[]> {
   return invoke<RecentWordIpc[]>('recent_practice_words', { windowDays, limit });
+}
+
+// ---------------------------------------------------------------------------
+// Word profile — mirrors `src-tauri/src/db/profile.rs`. One call returns the
+// full learning trail for a lemma so any surface can recall every related
+// learning resource (docs, stories, writing, SRS history, lookups, usage).
+// ---------------------------------------------------------------------------
+
+export interface SrsSnapshotIpc {
+  stability: number;
+  difficulty: number;
+  scheduled_days: number;
+  reps: number;
+  lapses: number;
+  last_review: number | null;
+  due: number;
+}
+
+export interface ReviewLogEntryIpc {
+  rating: number;
+  reviewed_at: number;
+  prev_stability: number | null;
+  new_stability: number | null;
+}
+
+export interface LookupSummaryIpc {
+  lookup_count: number;
+  first_looked_up_at: number;
+  last_looked_up_at: number;
+}
+
+export interface WordProfileIpc {
+  word_id: number;
+  lemma: string;
+  state: WordState;
+  state_source: string | null;
+  freq_rank: number | null;
+  exposure_count: number;
+  usage_count: number;
+  level: number;
+  first_seen_at: number | null;
+  marked_known_at: number | null;
+  user_note: string | null;
+  srs: SrsSnapshotIpc | null;
+  recent_reviews: ReviewLogEntryIpc[];
+  lookup: LookupSummaryIpc | null;
+  story_uses: number;
+  writing_uses: number;
+  materials: MaterialForWord[];
+}
+
+export async function wordProfile(lemma: string): Promise<WordProfileIpc | null> {
+  return invoke<WordProfileIpc | null>('word_profile', { lemma });
+}
+
+// ---------------------------------------------------------------------------
+// Learning stats — mirrors `src-tauri/src/db/stats.rs`. Powers the Learning
+// hub dashboard (funnel, SRS load, review-activity strip, surface totals).
+// ---------------------------------------------------------------------------
+
+export interface DayReviewsIpc {
+  day_start_ms: number;
+  reviews: number;
+}
+
+export interface SourceCountIpc {
+  source: string;
+  count: number;
+}
+
+export interface LearningStatsIpc {
+  unknown_count: number;
+  learning_count: number;
+  known_count: number;
+  known_by_source: SourceCountIpc[];
+  due_now: number;
+  scheduled_total: number;
+  reviews_by_day: DayReviewsIpc[];
+  reviews_today: number;
+  new_words_last_7d: number;
+  lookups_total: number;
+  documents_total: number;
+  stories_total: number;
+  writing_total: number;
+}
+
+export async function learningStats(days = 14): Promise<LearningStatsIpc> {
+  return invoke<LearningStatsIpc>('learning_stats', {
+    days,
+    tzOffsetMinutes: -new Date().getTimezoneOffset(),
+  });
 }
 
 // ---------------------------------------------------------------------------

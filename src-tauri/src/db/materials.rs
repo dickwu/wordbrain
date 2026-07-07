@@ -89,6 +89,10 @@ pub struct MaterialFull {
 pub struct MaterialForWord {
     pub material_id: i64,
     pub title: String,
+    /// 'paste' | 'file' | 'url' | 'epub' | 'epub_chapter' | 'ai_story' |
+    /// 'writing_submission' — lets the profile drawer split documents from
+    /// practice artefacts and route clicks to the right surface.
+    pub source_kind: String,
     pub created_at: i64,
     pub read_at: Option<i64>,
     pub occurrence_count: i64,
@@ -392,7 +396,7 @@ pub async fn materials_for_word_on_conn(
 ) -> DbResult<Vec<MaterialForWord>> {
     let mut rows = conn
         .query(
-            "SELECT m.id, m.title, m.created_at, m.read_at, \
+            "SELECT m.id, m.title, m.source_kind, m.created_at, m.read_at, \
                     wm.occurrence_count, wm.first_position, wm.sentence_preview \
                FROM materials m \
                JOIN word_materials wm ON wm.material_id = m.id \
@@ -408,11 +412,12 @@ pub async fn materials_for_word_on_conn(
         out.push(MaterialForWord {
             material_id: row.get::<i64>(0)?,
             title: row.get::<String>(1)?,
-            created_at: row.get::<i64>(2)?,
-            read_at: nullable_i64(&row, 3)?,
-            occurrence_count: row.get::<i64>(4)?,
-            first_position: row.get::<i64>(5)?,
-            sentence_preview: nullable_string(&row, 6)?,
+            source_kind: row.get::<String>(2)?,
+            created_at: row.get::<i64>(3)?,
+            read_at: nullable_i64(&row, 4)?,
+            occurrence_count: row.get::<i64>(5)?,
+            first_position: row.get::<i64>(6)?,
+            sentence_preview: nullable_string(&row, 7)?,
         });
     }
     Ok(out)

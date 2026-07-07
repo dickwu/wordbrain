@@ -12,7 +12,7 @@ import { EpubChapterPicker } from '@/app/components/reader/EpubChapterPicker';
 import { SettingsView } from '@/app/components/settings/SettingsView';
 import { StatusBar } from '@/app/components/common/StatusBar';
 import { LibraryView } from '@/app/components/library/LibraryView';
-import { MaterialsForWordDrawer } from '@/app/components/library/MaterialsForWordDrawer';
+import { WordProfileDrawer } from '@/app/components/words/WordProfileDrawer';
 import { DictionaryFloat } from '@/app/components/dictionary/DictionaryFloat';
 import { SearchHistoryView } from '@/app/components/dictionary/SearchHistoryView';
 import { WordLookupModal } from '@/app/components/dictionary/WordLookupModal';
@@ -74,6 +74,7 @@ export default function Home() {
   // view, not the Reader. See ~/.gstack/projects/dickwu-wordbrain/.../design-*.md.
   const [view, setView] = useState<ViewId>('learning');
   const [wordDrawerLemma, setWordDrawerLemma] = useState<string | null>(null);
+  const [storyToOpen, setStoryToOpen] = useState<number | null>(null);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   const [storyUnread, setStoryUnread] = useState(0);
   const [writingHint, setWritingHint] = useState<string | null>(null);
@@ -400,11 +401,40 @@ export default function Home() {
     [message]
   );
 
-  const onOpenMaterialFromDrawer = useCallback((m: MaterialForWord) => {
-    setView('reader');
-    setActiveMaterialId(m.material_id);
-    setWordDrawerLemma(null);
-  }, []);
+  // Open a saved material in the Reader by id (loads the full body first so
+  // the pane never shows stale text against a fresh material id).
+  const openMaterialById = useCallback(
+    async (materialId: number) => {
+      try {
+        const full = await loadMaterial(materialId);
+        if (!full) {
+          message.error('Material not found');
+          return;
+        }
+        setReaderSeed(full.raw_text);
+        setActiveMaterialId(materialId);
+        setView('reader');
+      } catch (err) {
+        message.error(`open material failed: ${err}`);
+      }
+    },
+    [message]
+  );
+
+  // Profile-drawer clicks route by source kind: AI stories reopen in the
+  // Story surface (cloze + MCQ intact); documents open in the Reader.
+  const onOpenMaterialFromDrawer = useCallback(
+    (m: MaterialForWord) => {
+      setWordDrawerLemma(null);
+      if (m.source_kind === 'ai_story') {
+        setStoryToOpen(m.material_id);
+        setView('story');
+        return;
+      }
+      void openMaterialById(m.material_id);
+    },
+    [openMaterialById]
+  );
 
   const toolbarRight = useMemo(() => {
     switch (view) {
@@ -443,35 +473,36 @@ export default function Home() {
       case 'reader':
         return <ReaderView readerSeed={readerSeed} onLemmaDrill={setWordDrawerLemma} />;
       case 'learning':
-        return <LearningView />;
+        return (
+          <LearningView
+            onNavigate={setView}
+            onOpenMaterial={(id) => void openMaterialById(id)}
+            onDrillLemma={setWordDrawerLemma}
+          />
+        );
       case 'review':
-        return <ReviewSession />;
+        return <ReviewSession onDrillLemma={setWordDrawerLemma} />;
       case 'story':
-        return <StoryView onDrillLemma={setWordDrawerLemma} />;
+        return (
+          <StoryView
+            onDrillLemma={setWordDrawerLemma}
+            openStoryId={storyToOpen}
+            onOpenStoryConsumed={() => setStoryToOpen(null)}
+          />
+        );
       case 'writing':
         return <WritingView />;
       case 'network':
         return (
           <NetworkView
             refreshKey={libraryRefresh}
-            onOpenMaterial={async (id) => {
-              try {
-                const full = await loadMaterial(id);
-                if (!full) {
-                  message.error('Material not found');
-                  return;
-                }
-                setReaderSeed(full.raw_text);
-                setActiveMaterialId(id);
-                setView('reader');
-              } catch (err) {
-                message.error(`open material failed: ${err}`);
-              }
-            }}
+            onOpenMaterial={(id) => void openMaterialById(id)}
           />
         );
       case 'words':
-        return <WordsView onSwitchToReader={() => setView('reader')} />;
+        return (
+          <WordsView onSwitchToReader={() => setView('reader')} onDrillLemma={setWordDrawerLemma} />
+        );
       case 'searches':
         return (
           <SearchHistoryView onSearch={(word) => setHistoryLookup({ word, nonce: Date.now() })} />
@@ -504,10 +535,11 @@ export default function Home() {
         </div>
       </div>
 
-      <MaterialsForWordDrawer
+      <WordProfileDrawer
         lemma={wordDrawerLemma}
         onClose={() => setWordDrawerLemma(null)}
         onOpenMaterial={onOpenMaterialFromDrawer}
+        onLookup={(word) => setHistoryLookup({ word, nonce: Date.now() })}
       />
 
       {historyLookup && (

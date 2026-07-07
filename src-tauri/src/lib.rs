@@ -102,6 +102,8 @@ pub fn run() {
             commands::network::cluster_for_word,
             commands::usage::register_word_use,
             commands::usage::recent_practice_words,
+            commands::profile::word_profile,
+            commands::stats::learning_stats,
             commands::story::generate_story,
             commands::story::list_story_history,
             commands::story::load_story,

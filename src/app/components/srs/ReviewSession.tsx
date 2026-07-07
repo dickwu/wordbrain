@@ -1,9 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { App as AntApp, Empty, Spin } from 'antd';
+import { App as AntApp, Empty, Spin, Tag } from 'antd';
 import { Icons } from '@/app/components/shell/Icons';
-import { applySrsRating, listDueSrs, type DueCardIpc, isTauri } from '@/app/lib/ipc';
+import {
+  applySrsRating,
+  listDueSrs,
+  materialsForWord,
+  type DueCardIpc,
+  type MaterialForWord,
+  isTauri,
+} from '@/app/lib/ipc';
 import { RATING_CODE, RATING_LABEL, schedule, type SrsRating } from '@/app/lib/srs';
 import { useWordStore } from '@/app/stores/wordStore';
 import { refreshDueCount } from '@/app/stores/srsStore';
@@ -24,20 +31,29 @@ const GRADES: ReadonlyArray<{
   { k: 'easy', l: 'Easy', hint: '9d', cls: 'g-easy' },
 ];
 
+interface ReviewSessionProps {
+  /** Open the full word-profile drawer (encounters, practice trail, history). */
+  onDrillLemma?: (lemma: string) => void;
+}
+
 /**
  * Drains the SRS due queue one card at a time. Editorial flashcard:
  * 72px serif lemma, sample sentence quote, four colour-coded grade buttons.
- * Keeps the existing IPC + ts-fsrs scheduling intact.
+ * After reveal it anchors the memory with "where you met it" sentences pulled
+ * from the learner's own materials; the done screen recaps the words rated
+ * Again/Hard so they can be drilled next.
  */
-export function ReviewSession() {
+export function ReviewSession({ onDrillLemma }: ReviewSessionProps = {}) {
   const { message } = AntApp.useApp();
   const [phase, setPhase] = useState<Phase>('loading');
   const [queue, setQueue] = useState<DueCardIpc[]>([]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [gloss, setGloss] = useState<DictionaryLookupEntry | null>(null);
+  const [contexts, setContexts] = useState<MaterialForWord[]>([]);
   const [graduatedCount, setGraduatedCount] = useState(0);
   const [reviewedCount, setReviewedCount] = useState(0);
+  const [weakLemmas, setWeakLemmas] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const current = queue[index];
@@ -50,8 +66,10 @@ export function ReviewSession() {
       setIndex(0);
       setRevealed(false);
       setGloss(null);
+      setContexts([]);
       setGraduatedCount(0);
       setReviewedCount(0);
+      setWeakLemmas([]);
       setPhase(due.length === 0 ? 'empty' : 'reviewing');
     } catch (err) {
       message.error(`Failed to load due queue: ${err}`);
@@ -63,17 +81,28 @@ export function ReviewSession() {
     void loadQueue();
   }, [loadQueue]);
 
-  // Pre-fetch the gloss for the current card so reveal feels instant.
+  // Pre-fetch the gloss + personal encounter contexts for the current card so
+  // reveal feels instant. The contexts are the learner's own sentences — the
+  // strongest memory anchor we have.
   useEffect(() => {
     if (!current) return;
     let cancelled = false;
     setRevealed(false);
     setGloss(null);
+    setContexts([]);
     (async () => {
       if (!isTauri()) return;
       try {
         const res = await lookupRemoteDictionary(current.lemma, { limit: 1 });
         if (!cancelled) setGloss(res.entries[0] ?? null);
+      } catch {
+        /* non-fatal */
+      }
+      try {
+        const rows = await materialsForWord(current.lemma);
+        if (!cancelled) {
+          setContexts(rows.filter((m) => m.sentence_preview).slice(0, 3));
+        }
       } catch {
         /* non-fatal */
       }
@@ -107,6 +136,9 @@ export function ReviewSession() {
           }
         }
         setReviewedCount((n) => n + 1);
+        if (rating === 'again' || rating === 'hard') {
+          setWeakLemmas((prev) => (prev.includes(current.lemma) ? prev : [...prev, current.lemma]));
+        }
 
         if (index + 1 >= queue.length) {
           setPhase('done');
@@ -207,6 +239,28 @@ export function ReviewSession() {
             )}
             .
           </div>
+          {weakLemmas.length > 0 && (
+            <div className="fc-weak">
+              <div className="fc-ctx-title" style={{ justifyContent: 'center' }}>
+                Tricky this session
+              </div>
+              <div className="fc-weak-chips">
+                {weakLemmas.map((lemma) => (
+                  <button
+                    key={lemma}
+                    type="button"
+                    className="chip fc-weak-chip"
+                    onClick={() => onDrillLemma?.(lemma)}
+                  >
+                    {lemma}
+                  </button>
+                ))}
+              </div>
+              <div className="small dim" style={{ marginTop: 8 }}>
+                Click a word for its full trail, then drill it in Story or Writing.
+              </div>
+            </div>
+          )}
           <div style={{ marginTop: 24 }}>
             <button type="button" className="btn primary" onClick={loadQueue}>
               Reload queue
@@ -275,6 +329,32 @@ export function ReviewSession() {
                     Dictionary API has no entry for <span className="mono">{current.lemma}</span>.
                   </div>
                 )}
+                {contexts.length > 0 && (
+                  <div className="fc-contexts">
+                    <div className="fc-ctx-title">
+                      Where you met it
+                      {onDrillLemma && (
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          onClick={() => onDrillLemma(current.lemma)}
+                        >
+                          Full trail →
+                        </button>
+                      )}
+                    </div>
+                    {contexts.map((m) => (
+                      <div key={m.material_id} className="fc-ctx-row">
+                        <div className="serif fc-ctx-sentence">“{m.sentence_preview}”</div>
+                        <div className="small dim">
+                          {m.title}
+                          {m.source_kind === 'ai_story' && <Tag color="purple">story</Tag>}
+                          {m.source_kind === 'writing_submission' && <Tag color="cyan">yours</Tag>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="fc-grades">
                   {GRADES.map((g) => (
                     <button
@@ -320,6 +400,18 @@ export function ReviewSession() {
         }
         .fc-reveal { width: 100%; padding: 14px; justify-content: center; font-size: 14px; }
         .fc-answer { padding-top: 20px; border-top: 1px solid var(--rule-soft); }
+        .fc-contexts { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--rule-soft); }
+        .fc-ctx-title {
+          display: flex; align-items: center; justify-content: space-between; gap: 8px;
+          font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+          color: var(--ink-3); margin-bottom: 8px;
+        }
+        .fc-ctx-row { margin-bottom: 10px; }
+        .fc-ctx-sentence { font-size: 14px; font-style: italic; color: var(--ink-2, var(--ink)); }
+        .fc-weak { margin-top: 20px; }
+        .fc-weak-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+        .fc-weak-chip { cursor: pointer; border: 1px solid var(--rule); }
+        .fc-weak-chip:hover { border-color: var(--accent); }
         .fc-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 24px; }
         .grade {
           appearance: none; border: 1px solid var(--rule); background: var(--paper);

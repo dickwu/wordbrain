@@ -18,9 +18,11 @@ import { WordsToolbar, type StateFilter } from './WordsToolbar';
 
 interface WordsViewProps {
   onSwitchToReader?: () => void;
+  /** Open the full word-profile drawer for a lemma. */
+  onDrillLemma?: (lemma: string) => void;
 }
 
-export function WordsView({ onSwitchToReader }: WordsViewProps) {
+export function WordsView({ onSwitchToReader, onDrillLemma }: WordsViewProps) {
   const { message, modal } = AntApp.useApp();
   const [stateFilter, setStateFilter] = useState<StateFilter>('known');
   const [sources, setSources] = useState<string[]>([]);
@@ -226,6 +228,7 @@ export function WordsView({ onSwitchToReader }: WordsViewProps) {
           onUnmark={onUnmark}
           onStateChange={onStateChange}
           onNoteSave={onNoteSave}
+          onDrillLemma={onDrillLemma}
         />
       )}
     </div>

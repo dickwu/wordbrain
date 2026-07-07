@@ -15,6 +15,8 @@ interface WordsTableProps {
   onUnmark: (lemma: string) => void;
   onStateChange: (lemma: string, state: 'known' | 'learning') => void;
   onNoteSave: (lemma: string, note: string | null) => Promise<void> | void;
+  /** Open the full word-profile drawer (encounters, SRS history, practice). */
+  onDrillLemma?: (lemma: string) => void;
 }
 
 function formatDate(ms: number | null): string {
@@ -41,6 +43,7 @@ export function WordsTable({
   onUnmark,
   onStateChange,
   onNoteSave,
+  onDrillLemma,
 }: WordsTableProps) {
   const [scrollY, setScrollY] = useState(DEFAULT_TABLE_SCROLL_Y);
 
@@ -60,6 +63,19 @@ export function WordsTable({
       sorter: (a, b) => a.lemma.localeCompare(b.lemma),
       defaultSortOrder: 'ascend',
       width: 200,
+      render: (_: unknown, r: WordRecord) =>
+        onDrillLemma ? (
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, height: 'auto' }}
+            onClick={() => onDrillLemma(r.lemma)}
+          >
+            {r.lemma}
+          </Button>
+        ) : (
+          r.lemma
+        ),
     },
     {
       title: 'State',

@@ -63,6 +63,10 @@ interface StoryLookup {
 
 interface StoryViewProps {
   onDrillLemma?: (lemma: string) => void;
+  /** Deep-link: load this saved story on mount (e.g. from a word profile). */
+  openStoryId?: number | null;
+  /** Called once `openStoryId` has been consumed so the owner can clear it. */
+  onOpenStoryConsumed?: () => void;
 }
 
 /**
@@ -76,7 +80,7 @@ interface StoryViewProps {
  * The story is persisted server-side as a `materials` row with
  * `source_kind='ai_story'` so it re-appears in the Library.
  */
-export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
+export function StoryView({ onDrillLemma, openStoryId, onOpenStoryConsumed }: StoryViewProps = {}) {
   const { message } = AntApp.useApp();
   const { token } = theme.useToken();
   const known = useWordStore((s) => s.known);
@@ -127,7 +131,8 @@ export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
         setSeed(rows);
         setSelectedWordIds(new Set(rows.map((row) => row.id)));
         setHistory(storyHistory);
-        setPhase('idle');
+        // A deep-linked story may already be rendered — don't clobber it.
+        setPhase((p) => (p === 'ready' ? p : 'idle'));
       } catch (err) {
         if (!cancelled) {
           setSeedError(`Story Review failed to load: ${err}`);
@@ -199,6 +204,13 @@ export function StoryView({ onDrillLemma }: StoryViewProps = {}) {
     },
     [applyStory, message, refreshHistory]
   );
+
+  // Deep-link consumption: a word-profile "open story" click lands here.
+  useEffect(() => {
+    if (openStoryId == null) return;
+    void onLoadHistory(openStoryId);
+    onOpenStoryConsumed?.();
+  }, [openStoryId, onLoadHistory, onOpenStoryConsumed]);
 
   const onDeleteHistory = useCallback(
     async (materialId: number) => {
